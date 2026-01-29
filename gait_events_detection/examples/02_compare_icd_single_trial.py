@@ -12,6 +12,7 @@ from gait_events_detection.icd import (
     IcdFang,
     IcdHwang,
     IcdHwangImproved,
+    IcdJarchi
 )
 from gait_events_detection.data import load_npz_trial
 
@@ -26,7 +27,10 @@ npz_file = DATA_DIR / "INGC116_F2_SC_HD_acc.npz"
 # --------------------------------------------------
 time, imu_data, events = load_npz_trial(npz_file)
 
-# Local frame convention
+# Body frame convention (Mobilise-D):
+# x -> inferosuperior (is)
+# y -> mediolateral (ml)
+# z -> anteroposterior (ap)
 imu_data[:, 0] = -imu_data[:, 0]
 imu_data[:, 2] = -imu_data[:, 2]
 
@@ -57,6 +61,7 @@ algorithms = {
     "Fang": IcdFang(),
     "Hwang": IcdHwang(),
     "HwangImp": IcdHwangImproved(),
+    "Jarchi": IcdJarchi()
 }
 
 results = {}
