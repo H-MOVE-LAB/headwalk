@@ -12,7 +12,8 @@ from gait_events_detection.icd import (
     IcdFang,
     IcdHwang,
     IcdHwangImproved,
-    IcdJarchi
+    IcdJarchi,
+    IcdDiao
 )
 from gait_events_detection.data import load_npz_trial
 
@@ -58,10 +59,11 @@ df = pd.DataFrame(
 # Apply algorithms
 # --------------------------------------------------
 algorithms = {
-    "Fang": IcdFang(),
-    "Hwang": IcdHwang(),
-    "HwangImp": IcdHwangImproved(),
-    "Jarchi": IcdJarchi()
+    # "Fang": IcdFang(),
+    # "Hwang": IcdHwang(),
+    # "HwangImp": IcdHwangImproved(),
+    # "Jarchi": IcdJarchi()
+    "Diao": IcdDiao()
 }
 
 results = {}
