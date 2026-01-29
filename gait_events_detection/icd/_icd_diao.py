@@ -26,31 +26,33 @@ class IcdDiao(BaseIcDetector):
 
     def __init__(
         self,
-        sampling_rate_hz: float,
         window_length: int | None = None,
         cutoff_hz: float = 5.0,
         ripple_db: float = 60.0,
     ) -> None:
-        self.sampling_rate_hz = sampling_rate_hz
         self.window_length = window_length
         self.cutoff_hz = cutoff_hz
         self.ripple_db = ripple_db
 
-        self.ssa: SingularSpectrumAnalysis | None = None
-        self.filter_order_n: int | None = None
-        self.filter_taps: np.ndarray | None = None
+        self.sampling_rate_hz: float | None = None
+        self.ssa = None
+        self.filter_order_n = None
+        self.filter_taps = None
 
     # ------------------------------------------------------------------
     # PUBLIC API
     # ------------------------------------------------------------------
     def detect(
-        self,
-        data: pd.DataFrame,
-        *,
-        acc_si_col: str = "acc_is",
-        acc_ml_col: str = "acc_ml",
-        **_: Any,
+            self,
+            data: pd.DataFrame,
+            *,
+            sampling_rate_hz: float,
+            acc_si_col: str = "acc_si",
+            acc_ml_col: str = "acc_ml",
+            **_,
     ):
+        self.sampling_rate_hz = sampling_rate_hz
+
         """
         Detect IC and FC events using Diao algorithm.
         """
