@@ -27,7 +27,7 @@ class IcdDiao(BaseIcDetector):
     def __init__(
         self,
         window_length: int | None = None,
-        cutoff_hz: float = 5.0,
+        cutoff_hz: float = 3.0,
         ripple_db: float = 60.0,
     ) -> None:
         self.window_length = window_length
@@ -83,8 +83,8 @@ class IcdDiao(BaseIcDetector):
         acc_si_ssa = self.ssa.fit_transform(acc_si.reshape(1, -1))
         acc_ml_ssa = self.ssa.fit_transform(acc_ml.reshape(1, -1))
 
-        acc_si_dom = acc_si_ssa[1]
-        acc_ml_wo_trend = acc_ml_ssa[1] + acc_ml_ssa[2]
+        acc_si_dom = acc_si_ssa[0,1,:]
+        acc_ml_wo_trend = acc_ml_ssa[0,1,:] + acc_ml_ssa[0,2,:]
 
         # --------------------------------------------------
         # EVENT DETECTION

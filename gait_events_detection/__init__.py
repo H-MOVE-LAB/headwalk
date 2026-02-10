@@ -6,12 +6,12 @@ from .icd import *
 
 __all__ = [
     "BaseIcDetector",
-    "IcdMcCamley",
     "IcdFang",
     "IcdHwangImproved",
     "IcdHwang",
     "IcdJarchi",
     "IcdDiao",
+    "IcdDiaoComplete",
     "IcdTasca",
     "IcdTomc",
     "IcdTcn"

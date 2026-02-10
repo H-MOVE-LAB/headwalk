@@ -15,6 +15,7 @@ from gait_events_detection.icd import (
     IcdHwangImproved,
     IcdJarchi,
     IcdDiao,
+    IcdDiaoComplete,
     IcdTasca,
     IcdTomc,
     IcdTcn
@@ -80,14 +81,15 @@ df = pd.DataFrame(
 # Apply algorithms
 # --------------------------------------------------
 algorithms = {
-    "Fang": IcdFang(),
-    "Hwang": IcdHwang(),
-    "HwangImp": IcdHwangImproved(),
-    "Jarchi": IcdJarchi(),
-    "Diao": IcdDiao(),
-    # "IcdTasca": IcdTasca()
-    "Tomc": IcdTomc(),
-    "TCN": IcdTcn(model_path=MODEL_PATH)
+    # "Fang": IcdFang(),
+    # "Hwang": IcdHwang(),
+    # "HwangImp": IcdHwangImproved(),
+    # "Jarchi": IcdJarchi(),
+    # "Diao": IcdDiao(),
+    "DiaoComplete": IcdDiaoComplete(),
+    # # "IcdTasca": IcdTasca()
+    # "Tomc": IcdTomc(),
+    # "TCN": IcdTcn(model_path=MODEL_PATH)
 }
 
 results = {}
