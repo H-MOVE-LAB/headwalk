@@ -5,6 +5,11 @@ from ._icd_hwang_improved import IcdHwangImproved
 from ._icd_hwang import IcdHwang
 from ._icd_jarchi import IcdJarchi
 from ._icd_diao import IcdDiao
+from ._icd_tasca import IcdTasca
+from ._icd_tomc import IcdTomc
+from ._icd_tcn import IcdTcn
+
+
 
 __all__ = [
     "BaseIcDetector",
@@ -13,5 +18,8 @@ __all__ = [
     "IcdHwangImproved",
     "IcdHwang",
     "IcdJarchi",
-    "IcdDiao"
+    "IcdDiao",
+    "IcdTasca",
+    "IcdTomc",
+    "IcdTcn"
 ]

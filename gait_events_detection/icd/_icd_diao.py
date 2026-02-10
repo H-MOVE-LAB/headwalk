@@ -47,7 +47,7 @@ class IcdDiao(BaseIcDetector):
             data: pd.DataFrame,
             *,
             sampling_rate_hz: float,
-            acc_si_col: str = "acc_si",
+            acc_si_col: str = "acc_is",
             acc_ml_col: str = "acc_ml",
             **_,
     ):
@@ -71,7 +71,7 @@ class IcdDiao(BaseIcDetector):
         # FILTERING
         # --------------------------------------------------
         acc_si = -self._filter_signal(data[acc_si_col].to_numpy())
-        acc_ml = self._filter_signal(data[acc_ml_col].to_numpy()) * -1  # sign flip as in eargait
+        acc_ml = self._filter_signal(data[acc_ml_col].to_numpy())   # sign flip as in eargait
 
         assert (
             acc_si.shape[0] > 3 * self.sampling_rate_hz
@@ -107,7 +107,7 @@ class IcdDiao(BaseIcDetector):
 
         self.fc_list_ = pd.DataFrame(
             {"fc": fc_idx},
-            index=self.ic_list_.index,
+            index=pd.RangeIndex(len(fc_idx), name="step_id"),
         )
 
         return self

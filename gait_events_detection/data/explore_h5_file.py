@@ -22,7 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 h5_file = PROJECT_ROOT / "data" / "ICICLE-Gait_F2_SC" / "Controls" / "20140616-104931-INGC116F2_SC.h5"
 gaitrite_excel = PROJECT_ROOT / "metadata" / "Paolo_step_data.xlsx"
 
-sensor_key = "WT"       # Head sensor
+sensor_key = "HD"       # Head sensor
 acc_axis = 2            # z-axis (0=x,1=y,2=z)
 
 # --------------------------------------------------

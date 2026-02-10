@@ -2,7 +2,7 @@
 Gait event detection package for head-worn IMU data.
 """
 
-from .icd import BaseIcDetector, IcdMcCamley, IcdFang, IcdHwangImproved, IcdHwang, IcdJarchi, IcdDiao
+from .icd import *
 
 __all__ = [
     "BaseIcDetector",
@@ -11,5 +11,8 @@ __all__ = [
     "IcdHwangImproved",
     "IcdHwang",
     "IcdJarchi",
-    "IcdDiao"
+    "IcdDiao",
+    "IcdTasca",
+    "IcdTomc",
+    "IcdTcn"
 ]
