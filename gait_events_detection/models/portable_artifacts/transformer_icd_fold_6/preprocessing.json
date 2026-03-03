@@ -1,0 +1,8 @@
+{
+  "target_fs": 100.0,
+  "lowpass_hz": 20.0,
+  "butter_order": 4,
+  "window_size": 200,
+  "prob_threshold": 0.24,
+  "min_peak_distance": 25
+}

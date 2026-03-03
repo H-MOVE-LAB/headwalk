@@ -1,0 +1,33 @@
+{
+  "input_channels": [
+    "acc_is",
+    "acc_ml",
+    "acc_ap",
+    "gyr_is",
+    "gyr_ml",
+    "gyr_ap"
+  ],
+  "output_channels": [
+    "L_IC",
+    "L_FC",
+    "R_IC",
+    "R_FC"
+  ],
+  "labeling": "triangular smoothing \u00b14 samples (linear up/down), peak at 1.0",
+  "dataset": "WearGait-PD (construction set)",
+  "fold": 6,
+  "optuna_best_params": {
+    "d_model": 256,
+    "n_heads": 4,
+    "n_layers": 5,
+    "dim_ff": 768,
+    "dropout": 0.061399772936111305,
+    "lr": 0.0005783952852596786,
+    "weight_decay": 9.732602193423852e-05,
+    "batch_size": 32,
+    "event_weight": 5.536294560687869,
+    "beta": 0.3949120078322899
+  },
+  "torch_version": "2.5.1+cu121",
+  "lightning_version": "2.6.1"
+}

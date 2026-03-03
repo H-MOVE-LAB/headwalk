@@ -1,0 +1,13 @@
+{
+  "in_channels": 6,
+  "out_channels": 4,
+  "seq_len": 200,
+  "d_model": 256,
+  "n_heads": 4,
+  "n_layers": 5,
+  "dim_ff": 768,
+  "dropout": 0.061399772936111305,
+  "use_sigmoid": true,
+  "pos_encoding": "sin",
+  "norm_first": true
+}
