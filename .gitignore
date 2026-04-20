@@ -1,0 +1,26 @@
+# Cartelle pesanti
+data/*
+validation/gait_events_detection/results/_sub_analysis_plot/*
+validation/gait_events_detection/results/_pd_clinical_factor_analysis/*
+
+# File e cartelle temporanei
+*.log
+*.tmp
+.idea/*
+
+# File indesiderati
+*.png
+*.pdf
+*.csv
+
+# Python (se usi Python)
+__pycache__/
+*.pyc
+
+# Virtual env
+venv/*
+.env
+
+
+# Ri-includi csv che vuoi tenere
+!validation/gait_events_detection/results/_analysis_plots/*.csv

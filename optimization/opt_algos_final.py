@@ -5,23 +5,18 @@ import pandas as pd
 import optuna
 from tqdm import tqdm
 
-from gait_events_detection import IcdJiang
+from src.headwalk.gait_events_detection import IcdJiang
 # Import preprocessing utilities from your existing file
-from utils import (
+from src.headwalk.utils import (
     load_head_data,
     rotate_to_gravity,
     compute_quality_mask,
-    plot_events_single_algo,
 )
 
 # Import algorithms
-from gait_events_detection.icd import (
-    IcdFang,
+from src.headwalk.gait_events_detection import (
     IcdJarchi,
-    IcdDiaoComplete,
     IcdSeifer,
-    IcdTomc,
-    IcdFawden,
     IcdTransformer
 )
 
