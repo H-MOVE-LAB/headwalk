@@ -1,20 +1,20 @@
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 from .base import BaseLrClassifier
-from ._icd_fang import IcdFang
-from ._icd_hwang_improved import IcdHwangImproved
-from ._icd_hwang import IcdHwang
-from ._icd_jarchi import IcdJarchi
-from ._icd_diao import IcdDiao
-from ._icd_diao_complete import IcdDiaoComplete
-from ._icd_tasca import IcdTasca
-from ._icd_tomc import IcdTomc
-from ._icd_tcn import IcdTcn
-from ._icd_cnn import IcdCnn
-from ._icd_seifer import IcdSeifer
-from ._icd_fawden import IcdFawden
-from ._icd_jiang import IcdJiang
-from ._icd_transformer import IcdTransformer
-from ._icd_caserman import IcdCaserman
+from ._ged_fang import GedFang
+from ._ged_hwang_improved import GedHwangImproved
+from ._ged_hwang import GedHwang
+from ._ged_jarchi import GedJarchi
+from ._ged_diao import GedDiao
+from ._ged_diao_complete import GedDiaoComplete
+from ._ged_tasca import GedTasca
+from ._ged_tomc import GedTomc
+from ._ged_tcn import GedTcn
+from ._ged_cnn import GedCnn
+from ._ged_seifer import GedSeifer
+from ._ged_fawden import GedFawden
+from ._ged_jiang import GedJiang
+from ._ged_transformer import GedTransformer
+from ._ged_caserman import GedCaserman
 from ._lr_cnnlstm import LrCnnlstm
 
 
@@ -22,22 +22,22 @@ from ._lr_cnnlstm import LrCnnlstm
 
 
 __all__ = [
-    "BaseIcDetector",
+    "BaseGeDetector",
     "BaseLrClassifier",
-    "IcdFang",
-    "IcdHwangImproved",
-    "IcdHwang",
-    "IcdJarchi",
-    "IcdDiao",
-    "IcdDiaoComplete",
-    "IcdTasca",
-    "IcdTomc",
-    "IcdTcn",
-    "IcdCnn",
-    "IcdSeifer",
-    "IcdFawden",
-    "IcdJiang",
-    "IcdTransformer",
-    "IcdCaserman",
+    "GedFang",
+    "GedHwangImproved",
+    "GedHwang",
+    "GedJarchi",
+    "GedDiao",
+    "GedDiaoComplete",
+    "GedTasca",
+    "GedTomc",
+    "GedTcn",
+    "GedCnn",
+    "GedSeifer",
+    "GedFawden",
+    "GedJiang",
+    "GedTransformer",
+    "GedCaserman",
     "LrCnnlstm"
 ]

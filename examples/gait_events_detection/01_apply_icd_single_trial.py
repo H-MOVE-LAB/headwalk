@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
 
-from src.headwalk.gait_events_detection import IcdFang
+from src.headwalk.gait_events_detection import GedFang
 from scripts import load_npz_trial
 
 # --------------------------------------------------
@@ -59,7 +59,7 @@ df = pd.DataFrame(
 # --------------------------------------------------
 # Apply IC detector
 # --------------------------------------------------
-icd = IcdFang()
+icd = GedFang()
 icd.detect(df, sampling_rate_hz=target_fs)
 
 import matplotlib.pyplot as plt

@@ -5,10 +5,10 @@ import pywt
 from scipy.signal import butter, filtfilt, find_peaks, detrend
 from scipy.integrate import cumulative_trapezoid
 from typing import Optional, Tuple
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdFang(BaseIcDetector):
+class GedFang(BaseGeDetector):
     """
     Fang / Del Din Initial and Final Contact detector with McCamley Laterality.
 
@@ -100,7 +100,7 @@ class IcdFang(BaseIcDetector):
             gyr_column: str = "gyr_is",  # Vertical axis angular velocity
             plot_debug: bool = True,
             **kwargs
-    ) -> "IcdFang":
+    ) -> "GedFang":
         """
         Detect Initial and Final Contacts from acceleration data and determine laterality.
 

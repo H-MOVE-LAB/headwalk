@@ -1,17 +1,17 @@
 from tqdm import tqdm
 
 from src.headwalk.gait_events_detection import (
-    IcdFang,
-    IcdHwang,
-    IcdJarchi,
-    IcdDiaoComplete,
-    IcdSeifer,
-    IcdTomc,
-    IcdTcn,
-    IcdFawden,
-    IcdJiang,
-    IcdCnn,
-    IcdTransformer,
+    GedFang,
+    GedHwang,
+    GedJarchi,
+    GedDiaoComplete,
+    GedSeifer,
+    GedTomc,
+    GedTcn,
+    GedFawden,
+    GedJiang,
+    GedCnn,
+    GedTransformer,
 )
 from testing_utils import *
 
@@ -27,17 +27,17 @@ TOL = 0.25
 DATA_FOLDERS = ["ICICLE-Gait_F2_SC", "ICICLE-Gait_F2_SI", "ICICLE-Gait_F3_SI", "ICICLE-Gait_F3_SC", "ICICLE-Gait_F4_SI", "ICICLE-Gait_F4_SC"]
 STATIC_FOLDER = ["StaticStandToCheck"]
 ALGS = {
-    "Fang": IcdFang(),
-    "Hwang": IcdHwang(),
-    "Jarchi": IcdJarchi(),
-    "DiaoIMF": IcdDiaoComplete(),
-    "Tomc": IcdTomc(),
-    "TCN": IcdTcn(),
-    "CNN": IcdCnn(),
-    "Seifer": IcdSeifer(),
-    "Fawden": IcdFawden(),
-    "Jiang": IcdJiang(),
-    'Transformer': IcdTransformer(),
+    "Fang": GedFang(),
+    "Hwang": GedHwang(),
+    "Jarchi": GedJarchi(),
+    "DiaoIMF": GedDiaoComplete(),
+    "Tomc": GedTomc(),
+    "TCN": GedTcn(),
+    "CNN": GedCnn(),
+    "Seifer": GedSeifer(),
+    "Fawden": GedFawden(),
+    "Jiang": GedJiang(),
+    'Transformer': GedTransformer(),
 }
 plot_trial_flag = False
 # Load Database Once

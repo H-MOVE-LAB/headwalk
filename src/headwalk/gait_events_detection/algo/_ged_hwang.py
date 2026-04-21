@@ -5,10 +5,10 @@ from scipy.signal import butter, filtfilt, find_peaks
 from typing import Any, Optional
 from typing_extensions import Self, Unpack
 
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdHwang(BaseIcDetector):
+class GedHwang(BaseGeDetector):
     """
     Hwang Initial and Final Contact detector (Original FFT-based).
 

@@ -3,10 +3,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Optional, Any
 from typing_extensions import Self
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdJiang(BaseIcDetector):
+class GedJiang(BaseGeDetector):
     """
     Jiang Initial Contact detector based on Signal Vector Magnitude (SVM).
 

@@ -13,7 +13,7 @@ from src.headwalk.utils import (
 
 # Import algorithms
 from src.headwalk.gait_events_detection import (
-    IcdFang, IcdTomc
+    GedFang, GedTomc
 )
 
 # =============================================================================
@@ -24,14 +24,14 @@ from src.headwalk.gait_events_detection import (
 # This makes the objective function independent of the specific algorithm
 algorithms_config = {
     "Fang": {
-        "class": IcdFang,
+        "class": GedFang,
         "params": {
             "lowpass_hz": {"type": "float", "low": 2.6, "high": 4.0, "step": 0.2},
             "wavelet_type": {"type": "categorical", "choices": ["gaus1", "gaus2"]}
         }
     },
     "Tomc": {
-        "class": IcdTomc,
+        "class": GedTomc,
         "params": {
             # AFO gain (Dynamics)
             "k_omega": {"type": "float", "low": 1.0, "high": 10.0, "step": 0.5},

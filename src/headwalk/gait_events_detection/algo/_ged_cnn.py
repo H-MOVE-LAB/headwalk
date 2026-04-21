@@ -10,10 +10,10 @@ import pandas as pd
 from scipy.signal import butter, filtfilt, resample, find_peaks
 from typing_extensions import Self, Unpack
 
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdCnn(BaseIcDetector):
+class GedCnn(BaseGeDetector):
     """
     Initial / Final Contact detection using a trained TCN model.
     """

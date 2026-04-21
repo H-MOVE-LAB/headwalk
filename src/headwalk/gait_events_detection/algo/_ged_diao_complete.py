@@ -10,10 +10,10 @@ from scipy.linalg import eigh
 from pyts.decomposition import SingularSpectrumAnalysis
 from typing_extensions import Self, Unpack
 
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdDiaoComplete(BaseIcDetector):
+class GedDiaoComplete(BaseGeDetector):
     """
     Initial Contact (IC) and Final Contact (FC) detection based on Diao et al. (2020).
 

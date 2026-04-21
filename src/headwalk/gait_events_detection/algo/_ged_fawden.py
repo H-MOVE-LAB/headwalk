@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 from typing import Sequence
 
 
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdFawden(BaseIcDetector):
+class GedFawden(BaseGeDetector):
     """
     TP-EAR (Temporal Parameters from the EAR) algorithm - cleaned & modernized.
 

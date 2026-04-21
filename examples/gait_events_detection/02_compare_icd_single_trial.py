@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from src.headwalk.utils import align_imu_to_gravity
 
 from src.headwalk.gait_events_detection import (
-    IcdDiaoComplete
+    GedDiaoComplete
 )
 from scripts import load_npz_trial
 
@@ -79,7 +79,7 @@ algorithms = {
     # "Fang": IcdFang(),
     # "Hwang": IcdHwang(),
     # "Jarchi": IcdJarchi(),
-    "Diao": IcdDiaoComplete(iterative_filtering=True),
+    "Diao": GedDiaoComplete(iterative_filtering=True),
     # "Tomc": IcdTomc(),
     # "TCN": IcdTcn(),
     # "CNN": IcdCnn(),

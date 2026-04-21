@@ -6,7 +6,7 @@ from pyts.decomposition import SingularSpectrumAnalysis
 from scipy.signal import find_peaks, argrelextrema
 
 
-class IcdJarchi:
+class GedJarchi:
     """
     Independent implementation of Jarchi et al. (2014) Gait Event Detection.
 

@@ -6,10 +6,10 @@ from scipy.stats import zscore
 from typing_extensions import Self, Unpack
 import tensorflow as tf
 
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdTasca(BaseIcDetector):
+class GedTasca(BaseGeDetector):
     """
     Initial Contact (IC) detection based on a Temporal Convolutional Network
     (Tasca et al., 2025).

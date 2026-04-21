@@ -5,10 +5,10 @@ from scipy.signal import find_peaks
 from typing import Any, Optional
 from typing_extensions import Self, Unpack
 
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdTomc(BaseIcDetector):
+class GedTomc(BaseGeDetector):
     """
     Gait event detection based on Adaptive Frequency Oscillators (AFO).
     Simplified offline version using global peak detection on reconstructed signals.

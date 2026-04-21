@@ -6,10 +6,10 @@ from scipy.signal import find_peaks
 from typing import Optional, Tuple
 from typing_extensions import Self
 
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdCaserman(BaseIcDetector):
+class GedCaserman(BaseGeDetector):
     """
     Caserman et al. (2016) step / gait event detector using head acceleration signals.
 

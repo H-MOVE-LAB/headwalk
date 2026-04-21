@@ -9,17 +9,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from src.headwalk.gait_events_detection import (
-    IcdFang,
-    IcdHwang,
-    IcdJarchi,
-    IcdDiaoComplete,
-    IcdSeifer,
-    IcdTomc,
-    IcdTcn,
-    IcdFawden,
-    IcdJiang,
-    IcdCnn,
-    IcdTransformer,
+    GedFang,
+    GedHwang,
+    GedJarchi,
+    GedDiaoComplete,
+    GedSeifer,
+    GedTomc,
+    GedTcn,
+    GedFawden,
+    GedJiang,
+    GedCnn,
+    GedTransformer,
 )
 
 # Your project utilities (same as in your full-dataset testing)
@@ -42,17 +42,17 @@ TOL = 0.25
 EXCLUDE: list[str] = []
 
 ALGS: Dict[str, object] = {
-    "Fang": IcdFang(),
-    "Hwang": IcdHwang(),
-    "Jarchi": IcdJarchi(),
-    "DiaoIMF": IcdDiaoComplete(),
-    "Tomc": IcdTomc(),
-    "TCN": IcdTcn(),
-    "CNN": IcdCnn(),
-    "Seifer": IcdSeifer(),
-    "Fawden": IcdFawden(),
-    "Jiang": IcdJiang(),
-    "Transformer": IcdTransformer(),
+    "Fang": GedFang(),
+    "Hwang": GedHwang(),
+    "Jarchi": GedJarchi(),
+    "DiaoIMF": GedDiaoComplete(),
+    "Tomc": GedTomc(),
+    "TCN": GedTcn(),
+    "CNN": GedCnn(),
+    "Seifer": GedSeifer(),
+    "Fawden": GedFawden(),
+    "Jiang": GedJiang(),
+    "Transformer": GedTransformer(),
 }
 
 

@@ -5,10 +5,10 @@ from scipy.signal import butter, filtfilt, find_peaks
 from typing import Any, Optional
 from typing_extensions import Self, Unpack
 
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdHwangImproved(BaseIcDetector):
+class GedHwangImproved(BaseGeDetector):
     """
     Initial Contact (IC) and Final Contact (FC) detector based on
     head vertical acceleration peak detection (Hwang et al., 2018).

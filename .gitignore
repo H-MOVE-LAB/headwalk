@@ -6,7 +6,7 @@ validation/gait_events_detection/results/_pd_clinical_factor_analysis/*
 # File e cartelle temporanei
 *.log
 *.tmp
-.idea/*
+.idea/
 
 # File indesiderati
 *.png

@@ -13,10 +13,10 @@ from typing_extensions import Self, Unpack
 from dataclasses import dataclass
 import math
 
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdTransformer(BaseIcDetector):
+class GedTransformer(BaseGeDetector):
 
     def __init__(
         self,

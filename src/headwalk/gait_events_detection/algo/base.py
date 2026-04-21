@@ -13,8 +13,8 @@ from tpcp import Algorithm
 from typing_extensions import Self, Unpack
 
 
-class BaseIcDetector(Algorithm):
-    """Base class for IC detectors.
+class BaseGeDetector(Algorithm):
+    """Base class for Gait Events (GE) detectors.
 
     Child classes should implement the `detect` method, which sets:
         - self.data

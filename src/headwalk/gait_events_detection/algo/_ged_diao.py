@@ -11,10 +11,10 @@ from scipy.signal import (
 )
 from pyts.decomposition import SingularSpectrumAnalysis
 
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdDiao(BaseIcDetector):
+class GedDiao(BaseGeDetector):
     """
     Initial Contact detection based on Diao et al., 2020.
 

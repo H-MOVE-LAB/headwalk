@@ -5,7 +5,7 @@ import pandas as pd
 import optuna
 from tqdm import tqdm
 
-from src.headwalk.gait_events_detection import IcdJiang
+from src.headwalk.gait_events_detection import GedJiang
 # Import preprocessing utilities from your existing file
 from src.headwalk.utils import (
     load_head_data,
@@ -15,9 +15,9 @@ from src.headwalk.utils import (
 
 # Import algorithms
 from src.headwalk.gait_events_detection import (
-    IcdJarchi,
-    IcdSeifer,
-    IcdTransformer
+    GedJarchi,
+    GedSeifer,
+    GedTransformer
 )
 
 # =============================================================================
@@ -55,26 +55,26 @@ algorithms_config = {
     #     }
     # },
     "Jiang": {
-        "class": IcdJiang,
+        "class": GedJiang,
         "params": {
             "fc_hz": {"type": "float", "low": 2.6, "high": 6.1, "step": 0.2},
             "c_constant": {"type": "float", "low": 0, "high": 2.2, "step": 0.2},
         }
     },
     "Seifer": {
-        "class": IcdSeifer,
+        "class": GedSeifer,
         "params": {
             "cutoff_hz": {"type": "float", "low": 2.0, "high": 6.1, "step": 0.2},
         }
     },
     "Transformer": {
-        "class": IcdTransformer,
+        "class": GedTransformer,
         "params": {
             "offset": {"type": "float", "low": 0, "high": 0.051, "step": 0.001},
         }
     },
     "Jarchi": {
-        "class": IcdJarchi,
+        "class": GedJarchi,
         "params": {
             "radius_s": {"type": "float", "low": 0.05, "high": 0.21, "step": 0.01},
         }

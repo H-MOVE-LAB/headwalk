@@ -4,10 +4,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, argrelextrema, firwin, kaiserord, filtfilt
 from pyts.decomposition import SingularSpectrumAnalysis
-from .base import BaseIcDetector
+from .base import BaseGeDetector
 
 
-class IcdSeifer(BaseIcDetector):
+class GedSeifer(BaseGeDetector):
     """
     Initial Contact (IC) and Final Contact (FC) detection based on Seifer et al. (2023)[cite: 8].
 
