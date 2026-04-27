@@ -4,29 +4,26 @@ pd_clinical_factor_analysis.py
 PD-only clinical factor analysis.
 
 This script:
-- loads per-trial gait and laterality performance
+- loads per-trial gait event metrics and laterality metrics
 - merges them with clinical metadata
 - keeps PD trials only
-- analyzes 9 clinical factors (UPDRS II excluded)
-- creates exactly two figures:
-    1) gait event detection figure (3x3 subplots, F1 score)
-    2) laterality detection figure (3x3 subplots, laterality accuracy)
-- each subplot contains boxplots for one factor
-- each factor uses its own color palette
-- each factor level displays:
-    * sample size (n)
-    * median value, written at the median line of the boxplot
-- saves descriptive and statistical CSV files
+- analyzes clinical factors across PD trials
+- creates two 3x3 figures per algorithm:
+    1) gait event detection (F1 score)
+    2) laterality detection (accuracy)
+- saves merged tables, descriptive summaries, and statistical results
 
-Author: generated for your workflow
+Important fix:
+- FOG is handled as a categorical Yes/No factor and is NOT rebinned as numeric.
 """
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -35,44 +32,32 @@ from scipy import stats
 
 
 # ============================================================
-# PATHS / CONFIGURATION
+# PATHS / CONFIG
 # ============================================================
 
-ROOT = Path(__file__).resolve().parents[2]  # adjust if needed
+ROOT = Path(__file__).resolve().parents[2]
 METADATA_XLSX = ROOT / "data" / "ICICLE Gait - 20250414_Paolo.xlsx"
 
-# ============================================================
-# USER CONFIGURATION
-# ============================================================
-
 BASE_DIR = Path("results/_analysis_plots")
-
 GAIT_CSV = BASE_DIR / "per_trial_metrics_ss_optimized.csv"
 LATERALITY_CSV = BASE_DIR / "per_trial_laterality.csv"
-OUTPUT_CSV_PATH = BASE_DIR / "aggregated_performance_table.csv"
+AGGREGATED_OUTPUT_CSV = BASE_DIR / "aggregated_performance_table.csv"
 
 OUTPUT_DIR = Path(__file__).resolve().parents[0] / "results" / "_pd_clinical_factor_analysis"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Algorithms to analyze
-ALGORITHMS_TO_ANALYZE = ["Fawden", "TCN"]
+ALGORITHMS_TO_ANALYZE = ["TCN"]#["Fawden", "TCN"]
+EVENT_TYPES = ["IC"]
+POOL_EVENT_TYPES = False
 
-# Event types to keep
-EVENT_TYPES = ["IC", "FC"]
-
-# Whether to pool IC and FC together in the clinical plots.
-# If False, you should add additional filtering logic.
-POOL_EVENT_TYPES = True
-
-# Minimum number of samples per factor level for statistical testing
 MIN_SAMPLES_PER_LEVEL = 2
-
-# Exclude missing / unknown levels from plots and stats
+ALPHA = 0.001
 DROP_UNKNOWN_LEVELS = True
 
-# ------------------------------------------------------------
-# GRAPHICS CONFIGURATION
-# ------------------------------------------------------------
+
+# ============================================================
+# GRAPHICS
+# ============================================================
 
 GRAPHICS = {
     "figure_size": (20, 16),
@@ -108,83 +93,93 @@ GRAPHICS = {
 
 plt.rcParams["font.family"] = GRAPHICS["font_family"]
 
-# ------------------------------------------------------------
-# FACTOR COLOR PALETTES
-# One palette per factor; colors are cycled if needed.
-# ------------------------------------------------------------
 
-FACTOR_COLORS = {
-    "Phenotype": ["#c0392b", "#e74c3c", "#f1948a", "#f5b7b1"],
-    "UPDRS_III": ["#1f618d", "#2e86c1", "#85c1e9", "#aed6f1"],
-    "Hohen_Yahr": ["#117a65", "#17a589", "#73c6b6", "#a3e4d7"],
-    "ABC": ["#7d6608", "#b7950b", "#f4d03f", "#f9e79f"],
-    "GDS": ["#6c3483", "#8e44ad", "#c39bd3", "#e8daef"],
-    "MOCA": ["#7b241c", "#a93226", "#d98880", "#f2d7d5"],
-    "MMSE": ["#0e6251", "#138d75", "#76d7c4", "#d1f2eb"],
-    "FOG": ["#5b2c6f", "#884ea0", "#c39bd3"],
-    "LEDD": ["#784212", "#af601a", "#d68910", "#f8c471"],
+# FACTOR_COLORS = {
+#     "Phenotype": ["#c0392b", "#e74c3c", "#f1948a", "#f5b7b1"],
+#     "UPDRS_III": ["#1f618d", "#2e86c1", "#85c1e9", "#aed6f1"],
+#     "Hohen_Yahr": ["#117a65", "#17a589", "#73c6b6", "#a3e4d7"],
+#     "ABC": ["#7d6608", "#b7950b", "#f4d03f", "#f9e79f"],
+#     "GDS": ["#6c3483", "#8e44ad", "#c39bd3", "#e8daef"],
+#     "MOCA": ["#7b241c", "#a93226", "#d98880", "#f2d7d5"],
+#     "MMSE": ["#0e6251", "#138d75", "#76d7c4", "#d1f2eb"],
+#     "FOG": ["#5b2c6f", "#884ea0", "#c39bd3"],
+#     "LEDD": ["#784212", "#af601a", "#d68910", "#f8c471"],
+# }
+a = ["#000080", "#3A5FCD", "#63B8FF"]
+# a = ["#1f618d", "#2e86c1", "#85c1e9", "#aed6f1"]
+FACTOR_COLORS = { # only blue
+    "Phenotype": a,
+    "UPDRS_III": a,
+    "Hohen_Yahr": a,
+    "ABC": a,
+    "GDS": a,
+    "MOCA": a,
+    "MMSE": a,
+    "FOG": a,
+    "LEDD": a,
 }
 
-# ------------------------------------------------------------
-# Factor configuration
-# UPDRS II intentionally excluded
-# ------------------------------------------------------------
+# ============================================================
+# FACTOR CONFIG
+# ============================================================
 
 FACTORS_CONFIG = [
-    {"name": "Phenotype", "source_col": "phenotype", "group_col": "phenotype_group"},
-    {"name": "UPDRS_III", "source_col": "updrs_iii", "group_col": "updrs_iii_group"},
-    {"name": "Hohen_Yahr", "source_col": "hy", "group_col": "hy_group"},
-    {"name": "ABC", "source_col": "abc", "group_col": "abc_group"},
-    {"name": "GDS", "source_col": "gds", "group_col": "gds_group"},
-    {"name": "MOCA", "source_col": "moca", "group_col": "moca_group"},
-    {"name": "MMSE", "source_col": "mmse", "group_col": "mmse_group"},
-    {"name": "FOG", "source_col": "fog_binary", "group_col": "fog_group"},
-    {"name": "LEDD", "source_col": "ledd", "group_col": "ledd_group"},
+    {"name": "Phenotype", "raw_col": "phenotype", "group_col": "phenotype_group"},
+    {"name": "UPDRS_III", "raw_col": "updrs_iii", "group_col": "updrs_iii_group"},
+    {"name": "Hohen_Yahr", "raw_col": "hy", "group_col": "hy_group"},
+    {"name": "ABC", "raw_col": "abc", "group_col": "abc_group"},
+    {"name": "GDS", "raw_col": "gds", "group_col": "gds_group"},
+    {"name": "MOCA", "raw_col": "moca", "group_col": "moca_group"},
+    {"name": "MMSE", "raw_col": "mmse", "group_col": "mmse_group"},
+    {"name": "FOG", "raw_col": "fog_binary", "group_col": "fog_group"},
+    {"name": "LEDD", "raw_col": "ledd", "group_col": "ledd_group"},
 ]
-
-CLINICAL_BINS = {
-    "updrs_iii": {
-        "bins": [-np.inf, 20, 35, np.inf],
-        "labels": ["Low", "Moderate", "High"],
+# (lower < x <= upper. es. ABC: 49 (excluded) - 79 (included) )
+NUMERIC_BIN_CONFIG = {
+    "updrs_iii": { # https://pubmed.ncbi.nlm.nih.gov/25466406/ Martined-Martin et al. (2014)
+        "bins": [-np.inf, 32, 58, np.inf],
+        "labels": ["Low", "Moderate", "Severe"],
     },
     "hy": {
         "bins": [-np.inf, 2, 3, np.inf],
         "labels": ["Early", "Mid", "Advanced"],
     },
-    "abc": {
+    "abc": { # https://strokengine.ca/en/assessments/activities-specific-balance-confidence-scale-abc-scale/ - Myers et al. (1998)
         "bins": [-np.inf, 49, 79, np.inf],
-        "labels": ["Low confidence", "Moderate confidence", "High confidence"],
+        "labels": ["Low", "Moderate", "High"],
     },
-    "gds": {
-        "bins": [-np.inf, 5, 10, np.inf],
-        "labels": ["No/low symptoms", "Possible depression", "Probable depression"],
+    "gds": { # https://www.sralab.org/rehabilitation-measures/geriatric-depression-scale - McDowell et al. (2006)
+        # "bins": [-np.inf, 5, 10, np.inf],
+        "bins": [-np.inf, 9, np.inf],
+
+        # "labels": ["No/low symptoms", "Possible depression", "Probable depression"],
+        "labels": ["No depression", "Depression"],
+
     },
-    "moca": {
-        "bins": [-np.inf, 17, 25, np.inf],
-        "labels": ["Moderate/Severe", "Mild impairment", "Normal"],
+    "moca": { # https://pubmed.ncbi.nlm.nih.gov/39471638/ # Fiorenzato et al. (2024)
+        # "bins": [-np.inf, 17, 25, np.inf],
+        # "labels": ["Moderate/Severe", "Mild impairment", "Normal"],
+        "bins": [-np.inf, 22, np.inf],
+        "labels": ["Mild", "Normal"],
     },
-    "mmse": {
-        "bins": [-np.inf, 17, 23, np.inf],
-        "labels": ["Moderate/Severe", "Mild impairment", "Normal"],
+    "mmse": { # https://pubmed.ncbi.nlm.nih.gov/39471638/ # Fiorenzato et al. (2024)
+        "bins": [-np.inf, 24, np.inf],
+        "labels": ["Dementia", "Mild"],
     },
-    "ledd": {
+    "ledd": { # https://pmc.ncbi.nlm.nih.gov/articles/PMC10525064/#:~:text=LEDD%20Covariate,total%20daily%20dopaminergic%20medication%20dosing.&text=Table%201%20shows%20PD%20treatment,as%20a%20primary%20categorical%20predictor.
         "bins": [-np.inf, 399, 699, np.inf],
         "labels": ["Low", "Medium", "High"],
-    },
-    "fog_binary": {
-        "bins": [-np.inf, 0.5, np.inf],
-        "labels": ["No", "Yes"],
     },
 }
 
 FACTOR_LEVEL_ORDER = {
     "Phenotype": None,
-    "UPDRS_III": ["Low", "Moderate", "High"],
+    "UPDRS_III": ["Low", "Moderate", "Severe"],
     "Hohen_Yahr": ["Early", "Mid", "Advanced"],
-    "ABC": ["Low confidence", "Moderate confidence", "High confidence"],
-    "GDS": ["No/low symptoms", "Possible depression", "Probable depression"],
-    "MOCA": ["Moderate/Severe", "Mild impairment", "Normal"],
-    "MMSE": ["Moderate/Severe", "Mild impairment", "Normal"],
+    "ABC": ["Low", "Moderate", "High"],
+    "GDS": ["No depression", "Depression"],
+    "MOCA": ["Mild", "Normal"],
+    "MMSE": ["Dementia", "Mild"],
     "FOG": ["No", "Yes"],
     "LEDD": ["Low", "Medium", "High"],
 }
@@ -229,8 +224,12 @@ TIMEPOINT_MAP = {
 
 
 # ============================================================
-# UTILITIES
+# HELPERS
 # ============================================================
+
+def ensure_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
 
 def standardize_cohort(series: pd.Series) -> pd.Series:
     mapping = {
@@ -243,7 +242,7 @@ def standardize_cohort(series: pd.Series) -> pd.Series:
     return cleaned.map(mapping).fillna(series.astype(str).str.strip())
 
 
-def extract_subject_and_timepoint(filename: str) -> Tuple[Optional[str], Optional[str]]:
+def extract_subject_and_timepoint(filename: str) -> tuple[str | None, str | None]:
     match = SUBJECT_RE.search(str(filename))
     if not match:
         return None, None
@@ -266,40 +265,47 @@ def sanitize_label(value: Any) -> str:
 def normalize_fog_value(value: Any) -> str:
     if pd.isna(value):
         return "Unknown"
+
     text = str(value).strip().lower()
-    if text in {"1", "yes", "y", "true"}:
+
+    if text in {"1", "1.0", "yes", "y", "true"}:
         return "Yes"
-    if text in {"0", "no", "n", "false"}:
+    if text in {"0", "0.0", "no", "n", "false"}:
         return "No"
-    return "Unknown"
+
+    try:
+        num = float(text)
+        if num > 0:
+            return "Yes"
+        return "No"
+    except Exception:
+        return "Unknown"
 
 
-def bin_numeric_value(value: Any, bins: List[float], labels: List[str]) -> str:
+def bin_numeric_value(value: Any, bins: list[float], labels: list[str]) -> str:
     if pd.isna(value):
         return "Unknown"
+
     try:
         x = float(value)
     except Exception:
         return "Unknown"
 
-    for i in range(len(labels)):
+    for i, label in enumerate(labels):
         lower = bins[i]
         upper = bins[i + 1]
         if i == 0:
             if x <= upper:
-                return labels[i]
+                return label
         else:
             if lower < x <= upper:
-                return labels[i]
+                return label
+
     return "Unknown"
 
 
-def ensure_dir(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-
-
 # ============================================================
-# DATA LOADING
+# LOADING
 # ============================================================
 
 def load_gait_csv(csv_path: Path) -> pd.DataFrame:
@@ -346,18 +352,18 @@ def load_metadata_excel(xlsx_path: Path) -> pd.DataFrame:
     if not xlsx_path.exists():
         raise FileNotFoundError(f"Metadata Excel not found: {xlsx_path}")
 
-    meta = pd.read_excel(xlsx_path)
-    meta.columns = [c.strip() for c in meta.columns]
+    df = pd.read_excel(xlsx_path)
+    df.columns = [c.strip() for c in df.columns]
 
-    if "First_name" not in meta.columns:
-        raise ValueError("Metadata Excel must contain 'First_name' column")
+    if "First_name" not in df.columns:
+        raise ValueError("Metadata Excel must contain 'First_name'")
 
-    meta["First_name"] = meta["First_name"].astype(str).str.strip().str.upper()
-    return meta
+    df["First_name"] = df["First_name"].astype(str).str.strip().str.upper()
+    return df
 
 
 # ============================================================
-# MERGING / FACTOR ATTACHMENT
+# MERGING
 # ============================================================
 
 def merge_trial_metrics(gait_df: pd.DataFrame, laterality_df: pd.DataFrame) -> pd.DataFrame:
@@ -371,85 +377,71 @@ def merge_trial_metrics(gait_df: pd.DataFrame, laterality_df: pd.DataFrame) -> p
         validate="one_to_one",
     )
 
-    subject_codes = []
-    timepoints = []
+    parsed = merged["filename"].apply(extract_subject_and_timepoint)
+    merged["subject_code"] = [x[0] for x in parsed]
+    merged["timepoint"] = [x[1] for x in parsed]
 
-    for filename in merged["filename"]:
-        subject_code, timepoint = extract_subject_and_timepoint(filename)
-        subject_codes.append(subject_code)
-        timepoints.append(timepoint)
-
-    merged["subject_code"] = subject_codes
-    merged["timepoint"] = timepoints
     return merged
 
 
 def attach_clinical_factors(per_trial_df: pd.DataFrame, metadata_df: pd.DataFrame) -> pd.DataFrame:
+    factor_keys = ["phenotype", "updrs_iii", "hy", "abc", "gds", "moca", "mmse", "fog_binary", "ledd"]
     metadata_lookup = metadata_df.set_index("First_name", drop=False)
-    output_rows = []
 
-    factor_keys = [
-        "phenotype",
-        "updrs_iii",
-        "hy",
-        "abc",
-        "gds",
-        "moca",
-        "mmse",
-        "fog_binary",
-        "ledd",
-    ]
+    rows = []
 
-    for _, row in per_trial_df.iterrows():
-        row_out = row.to_dict()
-        subject_code = row["subject_code"]
-        timepoint = row["timepoint"]
+    for _, trial in per_trial_df.iterrows():
+        out = trial.to_dict()
 
         for key in factor_keys:
-            row_out[key] = np.nan
+            out[key] = np.nan
 
-        if subject_code is None or timepoint is None:
-            output_rows.append(row_out)
+        subject_code = trial.get("subject_code")
+        timepoint = trial.get("timepoint")
+
+        if pd.isna(subject_code) or pd.isna(timepoint) or subject_code not in metadata_lookup.index:
+            rows.append(out)
             continue
 
-        if subject_code not in metadata_lookup.index:
-            output_rows.append(row_out)
-            continue
-
-        tp_map = TIMEPOINT_MAP.get(timepoint)
+        tp_map = TIMEPOINT_MAP.get(str(timepoint).upper())
         if tp_map is None:
-            output_rows.append(row_out)
+            rows.append(out)
             continue
 
         meta_row = metadata_lookup.loc[subject_code]
 
+        if isinstance(meta_row, pd.DataFrame):
+            meta_row = meta_row.iloc[0]
+
         for key in factor_keys:
-            metadata_col = tp_map.get(key)
-            if metadata_col is not None:
-                row_out[key] = meta_row.get(metadata_col, np.nan)
+            source_col = tp_map.get(key)
+            if source_col is not None and source_col in meta_row.index:
+                out[key] = meta_row[source_col]
 
-        output_rows.append(row_out)
+        rows.append(out)
 
-    df = pd.DataFrame(output_rows)
+    df = pd.DataFrame(rows)
 
+    # Normalize numeric factors
+    numeric_cols = ["updrs_iii", "hy", "abc", "gds", "moca", "mmse", "ledd"]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Grouped categorical factors
     df["phenotype_group"] = df["phenotype"].apply(sanitize_label)
 
-    for numeric_col in ["updrs_iii", "hy", "abc", "gds", "moca", "mmse", "ledd"]:
-        df[numeric_col] = pd.to_numeric(df[numeric_col], errors="coerce")
+    for col, cfg in NUMERIC_BIN_CONFIG.items():
+        df[f"{col}_group"] = df[col].apply(lambda x: bin_numeric_value(x, cfg["bins"], cfg["labels"]))
 
+    # FOG handled separately
     df["fog_binary"] = df["fog_binary"].apply(normalize_fog_value)
-    df["fog_group"] = df["fog_binary"].apply(sanitize_label)
-
-    for scale_name, config in CLINICAL_BINS.items():
-        df[f"{scale_name}_group"] = df[scale_name].apply(
-            lambda x: bin_numeric_value(x, config["bins"], config["labels"])
-        )
+    df["fog_group"] = df["fog_binary"]
 
     return df
 
 
 # ============================================================
-# AGGREGATED PERFORMANCE TABLE
+# AGGREGATED TABLE
 # ============================================================
 
 def build_aggregated_performance_table(df: pd.DataFrame) -> pd.DataFrame:
@@ -475,25 +467,24 @@ def build_aggregated_performance_table(df: pd.DataFrame) -> pd.DataFrame:
         for event_type in ["IC", "FC"]:
             desired_cols.append((metric, event_type))
 
-    existing_cols = [col for col in desired_cols if col in pivot.columns]
-    pivot = pivot.reindex(columns=existing_cols)
-    return pivot
+    existing_cols = [c for c in desired_cols if c in pivot.columns]
+    return pivot.reindex(columns=existing_cols)
 
 
 # ============================================================
-# GROUP / STATS HELPERS
+# STATS
 # ============================================================
 
-def get_ordered_levels(df: pd.DataFrame, factor_name: str, group_col: str) -> List[str]:
+def get_ordered_levels(df: pd.DataFrame, factor_name: str, group_col: str) -> list[str]:
     levels = [sanitize_label(v) for v in df[group_col].dropna().tolist()]
     levels = list(dict.fromkeys(levels))
 
     if DROP_UNKNOWN_LEVELS:
-        levels = [level for level in levels if level != "Unknown"]
+        levels = [x for x in levels if x != "Unknown"]
 
-    custom_order = FACTOR_LEVEL_ORDER.get(factor_name)
-    if custom_order is not None:
-        return [level for level in custom_order if level in levels]
+    custom = FACTOR_LEVEL_ORDER.get(factor_name)
+    if custom is not None:
+        return [x for x in custom if x in levels]
 
     return sorted(levels)
 
@@ -502,25 +493,26 @@ def summarize_metric_by_group(
     df: pd.DataFrame,
     group_col: str,
     metric_col: str,
-    ordered_levels: List[str],
+    ordered_levels: list[str],
 ) -> pd.DataFrame:
     rows = []
+
     for level in ordered_levels:
         values = pd.to_numeric(df.loc[df[group_col] == level, metric_col], errors="coerce").dropna()
-        rows.append(
-            {
-                "level": level,
-                "metric": metric_col,
-                "n": int(values.shape[0]),
-                "mean": float(values.mean()) if len(values) > 0 else np.nan,
-                "std": float(values.std(ddof=1)) if len(values) > 1 else np.nan,
-                "median": float(values.median()) if len(values) > 0 else np.nan,
-                "q1": float(values.quantile(0.25)) if len(values) > 0 else np.nan,
-                "q3": float(values.quantile(0.75)) if len(values) > 0 else np.nan,
-                "min": float(values.min()) if len(values) > 0 else np.nan,
-                "max": float(values.max()) if len(values) > 0 else np.nan,
-            }
-        )
+
+        rows.append({
+            "level": level,
+            "metric": metric_col,
+            "n": int(values.shape[0]),
+            "mean": float(values.mean()) if len(values) > 0 else np.nan,
+            "std": float(values.std(ddof=1)) if len(values) > 1 else np.nan,
+            "median": float(values.median()) if len(values) > 0 else np.nan,
+            "q1": float(values.quantile(0.25)) if len(values) > 0 else np.nan,
+            "q3": float(values.quantile(0.75)) if len(values) > 0 else np.nan,
+            "min": float(values.min()) if len(values) > 0 else np.nan,
+            "max": float(values.max()) if len(values) > 0 else np.nan,
+        })
+
     return pd.DataFrame(rows)
 
 
@@ -528,155 +520,140 @@ def pairwise_mannwhitney_bonferroni(
     df: pd.DataFrame,
     group_col: str,
     metric_col: str,
-    ordered_levels: List[str],
+    ordered_levels: list[str],
 ) -> pd.DataFrame:
     valid_results = []
-    placeholders = []
+    insufficient = []
 
-    for level_a, level_b in combinations(ordered_levels, 2):
-        x = pd.to_numeric(df.loc[df[group_col] == level_a, metric_col], errors="coerce").dropna().to_numpy()
-        y = pd.to_numeric(df.loc[df[group_col] == level_b, metric_col], errors="coerce").dropna().to_numpy()
+    for a, b in combinations(ordered_levels, 2):
+        x = pd.to_numeric(df.loc[df[group_col] == a, metric_col], errors="coerce").dropna().to_numpy()
+        y = pd.to_numeric(df.loc[df[group_col] == b, metric_col], errors="coerce").dropna().to_numpy()
 
         if len(x) < MIN_SAMPLES_PER_LEVEL or len(y) < MIN_SAMPLES_PER_LEVEL:
-            placeholders.append(
-                {
-                    "metric": metric_col,
-                    "group_1": level_a,
-                    "group_2": level_b,
-                    "n_1": len(x),
-                    "n_2": len(y),
-                    "statistic": np.nan,
-                    "p_uncorrected": np.nan,
-                    "p_bonferroni": np.nan,
-                    "significant": False,
-                    "note": "Insufficient samples",
-                }
-            )
+            insufficient.append({
+                "metric": metric_col,
+                "group_1": a,
+                "group_2": b,
+                "n_1": len(x),
+                "n_2": len(y),
+                "statistic": np.nan,
+                "p_uncorrected": np.nan,
+                "p_bonferroni": np.nan,
+                "significant": False,
+                "note": "Insufficient samples",
+            })
             continue
 
-        stat, p_uncorrected = stats.mannwhitneyu(x, y, alternative="two-sided")
-        valid_results.append((level_a, level_b, len(x), len(y), float(stat), float(p_uncorrected)))
+        stat, p = stats.mannwhitneyu(x, y, alternative="two-sided")
+        valid_results.append((a, b, len(x), len(y), float(stat), float(p)))
 
     n_comparisons = len(valid_results)
+    rows = []
 
-    output_rows = []
-    for level_a, level_b, n1, n2, stat, p_uncorrected in valid_results:
-        p_bonf = min(1.0, p_uncorrected * n_comparisons) if n_comparisons > 0 else p_uncorrected
-        output_rows.append(
-            {
-                "metric": metric_col,
-                "group_1": level_a,
-                "group_2": level_b,
-                "n_1": n1,
-                "n_2": n2,
-                "statistic": stat,
-                "p_uncorrected": p_uncorrected,
-                "p_bonferroni": p_bonf,
-                "significant": bool(p_bonf < 0.05),
-                "note": "",
-            }
-        )
+    for a, b, n1, n2, stat, p in valid_results:
+        p_bonf = min(1.0, p * n_comparisons) if n_comparisons > 0 else p
+        rows.append({
+            "metric": metric_col,
+            "group_1": a,
+            "group_2": b,
+            "n_1": n1,
+            "n_2": n2,
+            "statistic": stat,
+            "p_uncorrected": p,
+            "p_bonferroni": p_bonf,
+            "significant": bool(p_bonf < ALPHA),
+            "note": "",
+        })
 
-    output_rows.extend(placeholders)
-    posthoc_df = pd.DataFrame(output_rows)
+    rows.extend(insufficient)
+    out = pd.DataFrame(rows)
 
-    if not posthoc_df.empty:
-        posthoc_df = posthoc_df.sort_values(by=["group_1", "group_2"]).reset_index(drop=True)
+    if not out.empty:
+        out = out.sort_values(by=["group_1", "group_2"]).reset_index(drop=True)
 
-    return posthoc_df
+    return out
 
 
 def run_statistical_tests(
     df: pd.DataFrame,
     group_col: str,
     metric_col: str,
-    ordered_levels: List[str],
-) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
+    ordered_levels: list[str],
+) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
     valid_levels = []
-    group_arrays = []
+    arrays = []
 
     for level in ordered_levels:
-        values = pd.to_numeric(df.loc[df[group_col] == level, metric_col], errors="coerce").dropna().to_numpy()
-        if len(values) >= MIN_SAMPLES_PER_LEVEL:
+        vals = pd.to_numeric(df.loc[df[group_col] == level, metric_col], errors="coerce").dropna().to_numpy()
+        if len(vals) >= MIN_SAMPLES_PER_LEVEL:
             valid_levels.append(level)
-            group_arrays.append(values)
+            arrays.append(vals)
 
     if len(valid_levels) < 2:
-        omnibus_df = pd.DataFrame(
-            [{
-                "metric": metric_col,
-                "test": "not_run",
-                "n_levels": len(valid_levels),
-                "statistic": np.nan,
-                "p_value": np.nan,
-                "significant": False,
-                "note": "Fewer than two valid levels",
-            }]
-        )
-        return omnibus_df, pd.DataFrame(), []
+        omnibus = pd.DataFrame([{
+            "metric": metric_col,
+            "test": "not_run",
+            "n_levels": len(valid_levels),
+            "statistic": np.nan,
+            "p_value": np.nan,
+            "significant": False,
+            "note": "Fewer than two valid levels",
+        }])
+        return omnibus, pd.DataFrame(), []
 
     if len(valid_levels) == 2:
-        stat, p_value = stats.mannwhitneyu(group_arrays[0], group_arrays[1], alternative="two-sided")
-
-        omnibus_df = pd.DataFrame(
-            [{
-                "metric": metric_col,
-                "test": "mannwhitneyu",
-                "n_levels": 2,
-                "statistic": float(stat),
-                "p_value": float(p_value),
-                "significant": bool(p_value < 0.05),
-                "note": "",
-            }]
-        )
-
-        posthoc_df = pd.DataFrame(
-            [{
-                "metric": metric_col,
-                "group_1": valid_levels[0],
-                "group_2": valid_levels[1],
-                "n_1": len(group_arrays[0]),
-                "n_2": len(group_arrays[1]),
-                "statistic": float(stat),
-                "p_uncorrected": float(p_value),
-                "p_bonferroni": float(p_value),
-                "significant": bool(p_value < 0.05),
-                "note": "",
-            }]
-        )
-
-        significant_levels = valid_levels.copy() if p_value < 0.05 else []
-        return omnibus_df, posthoc_df, significant_levels
-
-    H, p_value = stats.kruskal(*group_arrays)
-
-    omnibus_df = pd.DataFrame(
-        [{
+        stat, p = stats.mannwhitneyu(arrays[0], arrays[1], alternative="two-sided")
+        omnibus = pd.DataFrame([{
             "metric": metric_col,
-            "test": "kruskal",
-            "n_levels": len(valid_levels),
-            "statistic": float(H),
-            "p_value": float(p_value),
-            "significant": bool(p_value < 0.05),
+            "test": "mannwhitneyu",
+            "n_levels": 2,
+            "statistic": float(stat),
+            "p_value": float(p),
+            "significant": bool(p < ALPHA),
             "note": "",
-        }]
-    )
+        }])
 
-    posthoc_df = pairwise_mannwhitney_bonferroni(df, group_col, metric_col, valid_levels)
+        posthoc = pd.DataFrame([{
+            "metric": metric_col,
+            "group_1": valid_levels[0],
+            "group_2": valid_levels[1],
+            "n_1": len(arrays[0]),
+            "n_2": len(arrays[1]),
+            "statistic": float(stat),
+            "p_uncorrected": float(p),
+            "p_bonferroni": float(p),
+            "significant": bool(p < ALPHA),
+            "note": "",
+        }])
 
-    significant_levels_set = set()
-    if not posthoc_df.empty:
-        sig_rows = posthoc_df[posthoc_df["significant"] == True]
-        for _, row in sig_rows.iterrows():
-            significant_levels_set.add(row["group_1"])
-            significant_levels_set.add(row["group_2"])
+        significant_levels = valid_levels.copy() if p < ALPHA else []
+        return omnibus, posthoc, significant_levels
 
-    significant_levels = [level for level in valid_levels if level in significant_levels_set]
-    return omnibus_df, posthoc_df, significant_levels
+    H, p = stats.kruskal(*arrays)
+    omnibus = pd.DataFrame([{
+        "metric": metric_col,
+        "test": "kruskal",
+        "n_levels": len(valid_levels),
+        "statistic": float(H),
+        "p_value": float(p),
+        "significant": bool(p < ALPHA),
+        "note": "",
+    }])
+
+    posthoc = pairwise_mannwhitney_bonferroni(df, group_col, metric_col, valid_levels)
+
+    significant_levels = set()
+    if not posthoc.empty:
+        sig = posthoc[posthoc["significant"] == True]
+        for _, row in sig.iterrows():
+            significant_levels.add(row["group_1"])
+            significant_levels.add(row["group_2"])
+
+    return omnibus, posthoc, [x for x in valid_levels if x in significant_levels]
 
 
 # ============================================================
-# PLOTTING HELPERS
+# PLOTTING
 # ============================================================
 
 def style_axes(ax: plt.Axes) -> None:
@@ -686,23 +663,18 @@ def style_axes(ax: plt.Axes) -> None:
     ax.tick_params(axis="both", labelsize=GRAPHICS["tick_label_fontsize"])
 
 
-def get_factor_palette(factor_name: str, n_levels: int) -> List[str]:
+def get_factor_palette(factor_name: str, n_levels: int) -> list[str]:
     palette = FACTOR_COLORS.get(factor_name, ["#7f8c8d"])
     if len(palette) >= n_levels:
         return palette[:n_levels]
-
-    extended = []
-    for i in range(n_levels):
-        extended.append(palette[i % len(palette)])
-    return extended
+    return [palette[i % len(palette)] for i in range(n_levels)]
 
 
-def add_n_annotations(ax: plt.Axes, ordered_levels: List[str], counts: List[int]) -> None:
-    y_frac = GRAPHICS["n_text_y_axes_fraction"]
+def add_n_annotations(ax: plt.Axes, counts: list[int]) -> None:
     for idx, count in enumerate(counts, start=1):
         ax.text(
             idx,
-            y_frac,
+            GRAPHICS["n_text_y_axes_fraction"],
             f"n={count}",
             transform=ax.get_xaxis_transform(),
             ha="center",
@@ -711,14 +683,14 @@ def add_n_annotations(ax: plt.Axes, ordered_levels: List[str], counts: List[int]
         )
 
 
-def add_median_annotations(ax: plt.Axes, ordered_levels: List[str], medians: List[float]) -> None:
-    for idx, median_value in enumerate(medians, start=1):
-        if pd.isna(median_value):
+def add_median_annotations(ax: plt.Axes, medians: list[float]) -> None:
+    for idx, median in enumerate(medians, start=1):
+        if pd.isna(median):
             continue
         ax.text(
             idx + GRAPHICS["annotation_x_offset"],
-            median_value,
-            f"{median_value:.2f}",
+            median,
+            f"{median:.2f}",
             ha="center",
             va="center",
             fontsize=GRAPHICS["annotation_fontsize"],
@@ -733,27 +705,24 @@ def add_median_annotations(ax: plt.Axes, ordered_levels: List[str], medians: Lis
 
 def add_significance_asterisks(
     ax: plt.Axes,
-    ordered_levels: List[str],
-    data_arrays: List[np.ndarray],
-    significant_levels: List[str],
+    ordered_levels: list[str],
+    data_arrays: list[np.ndarray],
+    significant_levels: list[str],
 ) -> None:
     if not significant_levels:
         return
 
-    finite_values = np.concatenate(
-        [arr[np.isfinite(arr)] for arr in data_arrays if len(arr) > 0]
-    ) if data_arrays else np.array([])
-
-    if finite_values.size == 0:
+    finite = np.concatenate([a[np.isfinite(a)] for a in data_arrays if len(a) > 0]) if data_arrays else np.array([])
+    if finite.size == 0:
         return
 
-    y_min = np.min(finite_values)
-    y_max = np.max(finite_values)
+    y_min = np.min(finite)
+    y_max = np.max(finite)
     y_range = max(y_max - y_min, 1e-6)
     offset = GRAPHICS["asterisk_y_offset_fraction"] * y_range
 
-    current_ylim = ax.get_ylim()
-    ax.set_ylim(current_ylim[0], max(current_ylim[1], y_max + 2.5 * offset))
+    ylim = ax.get_ylim()
+    ax.set_ylim(ylim[0], max(ylim[1], y_max + 2.5 * offset))
 
     for idx, (level, arr) in enumerate(zip(ordered_levels, data_arrays), start=1):
         if level not in significant_levels:
@@ -761,12 +730,11 @@ def add_significance_asterisks(
         valid_arr = arr[np.isfinite(arr)]
         if len(valid_arr) == 0:
             continue
-
         y_pos = np.max(valid_arr) + offset
         ax.text(
             idx + GRAPHICS["asterisk_x_offset"],
             y_pos,
-            "*",
+            "", #"*",
             fontsize=GRAPHICS["asterisk_fontsize"],
             fontweight="bold",
             va="center",
@@ -780,7 +748,7 @@ def draw_factor_subplot(
     group_col: str,
     metric_col: str,
     y_label: str,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     ordered_levels = get_ordered_levels(df, factor_name, group_col)
 
     if len(ordered_levels) < 2:
@@ -792,7 +760,8 @@ def draw_factor_subplot(
         pd.to_numeric(df.loc[df[group_col] == level, metric_col], errors="coerce").dropna().to_numpy()
         for level in ordered_levels
     ]
-    counts = [int(len(arr)) for arr in data_arrays]
+
+    counts = [len(arr) for arr in data_arrays]
     medians = [float(np.median(arr)) if len(arr) > 0 else np.nan for arr in data_arrays]
 
     summary_df = summarize_metric_by_group(df, group_col, metric_col, ordered_levels)
@@ -821,13 +790,19 @@ def draw_factor_subplot(
     ax.tick_params(axis="x", rotation=GRAPHICS["x_tick_rotation"])
     style_axes(ax)
 
-    add_n_annotations(ax, ordered_levels, counts)
-    add_median_annotations(ax, ordered_levels, medians)
+    add_n_annotations(ax, counts)
+    add_median_annotations(ax, medians)
     add_significance_asterisks(ax, ordered_levels, data_arrays, significant_levels)
 
-    if metric_col in {"f1", "accuracy"}:
-        current_ylim = ax.get_ylim()
-        ax.set_ylim(min(-0.05, current_ylim[0]), max(1.05, current_ylim[1]))
+    if metric_col == "f1":
+        ax.set_ylim(0.7, 1.0)
+    elif metric_col == "accuracy":
+        ylim = ax.get_ylim()
+        ax.set_ylim(min(-0.05, ylim[0]), max(1.05, ylim[1]))
+
+    summary_df = summary_df.copy()
+    summary_df["factor"] = factor_name
+    summary_df["levels"] = " | ".join(ordered_levels)
 
     omnibus_df = omnibus_df.copy()
     omnibus_df["factor"] = factor_name
@@ -837,12 +812,11 @@ def draw_factor_subplot(
         posthoc_df = posthoc_df.copy()
         posthoc_df["factor"] = factor_name
         posthoc_df["levels"] = " | ".join(ordered_levels)
+        stats_df = pd.concat([omnibus_df, posthoc_df], ignore_index=True)
+    else:
+        stats_df = omnibus_df
 
-    summary_df = summary_df.copy()
-    summary_df["factor"] = factor_name
-    summary_df["levels"] = " | ".join(ordered_levels)
-
-    return summary_df, pd.concat([omnibus_df, posthoc_df], ignore_index=True) if not posthoc_df.empty else omnibus_df
+    return summary_df, stats_df
 
 
 # ============================================================
@@ -919,7 +893,7 @@ def main() -> None:
     laterality_df = load_laterality_csv(LATERALITY_CSV)
     metadata_df = load_metadata_excel(METADATA_XLSX)
 
-    print("Merging trial-level gait and laterality data...")
+    print("Merging gait and laterality trial-level tables...")
     merged_df = merge_trial_metrics(gait_df, laterality_df)
 
     print("Attaching clinical factors...")
@@ -929,8 +903,8 @@ def main() -> None:
     analysis_df.to_csv(merged_output_path, index=False)
 
     aggregated_table = build_aggregated_performance_table(analysis_df)
-    aggregated_table.to_csv(OUTPUT_CSV_PATH)
-    print(f"Aggregated performance table saved to: {OUTPUT_CSV_PATH.resolve()}")
+    aggregated_table.to_csv(AGGREGATED_OUTPUT_CSV)
+    print(f"Aggregated performance table saved to: {AGGREGATED_OUTPUT_CSV.resolve()}")
 
     analysis_df = analysis_df[analysis_df["cohort"] == "PD"].copy()
     if analysis_df.empty:
@@ -940,7 +914,16 @@ def main() -> None:
     if analysis_df.empty:
         raise RuntimeError(f"No PD trials found for event types: {EVENT_TYPES}")
 
-    print("\nStarting PD factor plots...\n")
+    if POOL_EVENT_TYPES:
+        print("Pooling IC and FC together for factor analysis.")
+    else:
+        print("POOL_EVENT_TYPES=False is not implemented separately in this script.")
+
+    print("\nFOG distribution check:")
+    if "fog_group" in analysis_df.columns:
+        print(analysis_df["fog_group"].value_counts(dropna=False))
+    else:
+        print("fog_group column not found.")
 
     for algorithm_name in ALGORITHMS_TO_ANALYZE:
         df_algorithm = analysis_df[analysis_df["algo"] == algorithm_name].copy()

@@ -57,7 +57,8 @@ EVENT_TYPES = ["IC", "FC"]
 
 # Minimum number of samples per factor level to include the level in tests
 MIN_SAMPLES_PER_LEVEL = 2
-
+# Significance level (post hoc)
+ALPHA = 0.001
 # Whether to exclude missing / unknown groups from plots and stats
 DROP_UNKNOWN_LEVELS = True
 
@@ -105,7 +106,7 @@ TIMEPOINT_MAP = {
 }
 
 # Clinical scale bins.
-# Easy to modify in future runs.
+# Easy to modify in future runs. (lower < x <= upper. es. ABC: 49 (excluded) - 79 (included) )
 CLINICAL_BINS = {
     "updrs_ii": {
         "bins": [-np.inf, 10, 20, np.inf],
@@ -120,7 +121,7 @@ CLINICAL_BINS = {
         "labels": ["Early", "Mid", "Advanced"],
     },
     "abc": { # https://www.physio-pedia.com/Activities-Specific_Balance_Confidence_Scale
-        "bins": [-np.inf, 50, 80, np.inf],
+        "bins": [-np.inf, 49, 79, np.inf],
         "labels": ["Low confidence", "Moderate confidence", "High confidence"],
     },
     "gds": { # https://www.sralab.org/rehabilitation-measures/geriatric-depression-scale
@@ -603,7 +604,7 @@ def pairwise_mannwhitney_bonferroni(
                 "statistic": stat,
                 "p_uncorrected": p_uncorrected,
                 "p_bonferroni": p_bonf,
-                "significant": bool(p_bonf < 0.05),
+                "significant": bool(p_bonf < ALPHA),
                 "note": "",
             }
         )
@@ -667,7 +668,7 @@ def run_statistical_tests(
                     "n_levels": 2,
                     "statistic": float(stat),
                     "p_value": float(p_value),
-                    "significant": bool(p_value < 0.05),
+                    "significant": bool(p_value < ALPHA),
                     "note": "",
                 }
             ]
@@ -684,13 +685,13 @@ def run_statistical_tests(
                     "statistic": float(stat),
                     "p_uncorrected": float(p_value),
                     "p_bonferroni": float(p_value),
-                    "significant": bool(p_value < 0.05),
+                    "significant": bool(p_value < ALPHA),
                     "note": "",
                 }
             ]
         )
 
-        significant_levels = valid_levels.copy() if p_value < 0.05 else []
+        significant_levels = valid_levels.copy() if p_value < ALPHA else []
         return omnibus_df, posthoc_df, significant_levels
 
     H, p_value = stats.kruskal(*group_arrays)
@@ -703,7 +704,7 @@ def run_statistical_tests(
                 "n_levels": len(valid_levels),
                 "statistic": float(H),
                 "p_value": float(p_value),
-                "significant": bool(p_value < 0.05),
+                "significant": bool(p_value < ALPHA),
                 "note": "",
             }
         ]
