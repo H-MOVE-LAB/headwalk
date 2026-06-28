@@ -1,0 +1,19 @@
+{
+    "class_name": "GsdCnn1D",
+    "source_model_name": "cnn1d",
+    "window_config": "5s_50p_overlap",
+    "n_features": 1,
+    "balanced_accuracy": 0.9595162213610406,
+    "accuracy": 0.9594948772933048,
+    "recall_static": 0.9606796116504854,
+    "recall_walking": 0.9583528310715956,
+    "artifact_format": "keras_json_weights_h5",
+    "label_map": {
+        "0": "static",
+        "1": "walking"
+    },
+    "training_dataset": "WearGaitPD",
+    "selection_rule": "Best internal-validation balanced accuracy across window configurations",
+    "source_wrapper_root": "C:\\Users\\mirko\\OneDrive - Politecnico di Torino\\Desktop\\TESI\\Mirko Longagna\\GSD development\\results\\WearGaitPD_dataset\\features\\bottomup_wrapper_feature_selection",
+    "source_best_configuration": "C:\\Users\\mirko\\OneDrive - Politecnico di Torino\\Desktop\\TESI\\Mirko Longagna\\GSD development\\results\\WearGaitPD_dataset\\features\\bottomup_wrapper_feature_selection\\5s_50p_overlap\\cnn1d\\cnn1d_BEST_configuration.csv"
+}

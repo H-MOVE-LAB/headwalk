@@ -1,0 +1,19 @@
+{
+    "class_name": "GsdKnn",
+    "source_model_name": "knn",
+    "window_config": "5s_50p_overlap",
+    "n_features": 4,
+    "balanced_accuracy": 0.922351790687426,
+    "accuracy": 0.9223254705742197,
+    "recall_static": 0.9237864077669904,
+    "recall_walking": 0.9209171736078616,
+    "artifact_format": "joblib",
+    "label_map": {
+        "0": "static",
+        "1": "walking"
+    },
+    "training_dataset": "WearGaitPD",
+    "selection_rule": "Best internal-validation balanced accuracy across window configurations",
+    "source_wrapper_root": "C:\\Users\\mirko\\OneDrive - Politecnico di Torino\\Desktop\\TESI\\Mirko Longagna\\GSD development\\results\\WearGaitPD_dataset\\features\\bottomup_wrapper_feature_selection",
+    "source_best_configuration": "C:\\Users\\mirko\\OneDrive - Politecnico di Torino\\Desktop\\TESI\\Mirko Longagna\\GSD development\\results\\WearGaitPD_dataset\\features\\bottomup_wrapper_feature_selection\\5s_50p_overlap\\knn\\knn_BEST_configuration.csv"
+}

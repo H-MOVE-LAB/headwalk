@@ -1,0 +1,19 @@
+{
+    "class_name": "GsdRandomForest",
+    "source_model_name": "rf",
+    "window_config": "5s_50p_overlap",
+    "n_features": 4,
+    "balanced_accuracy": 0.9247964663283526,
+    "accuracy": 0.924708124851084,
+    "recall_static": 0.9296116504854368,
+    "recall_walking": 0.9199812821712682,
+    "artifact_format": "joblib",
+    "label_map": {
+        "0": "static",
+        "1": "walking"
+    },
+    "training_dataset": "WearGaitPD",
+    "selection_rule": "Best internal-validation balanced accuracy across window configurations",
+    "source_wrapper_root": "C:\\Users\\mirko\\OneDrive - Politecnico di Torino\\Desktop\\TESI\\Mirko Longagna\\GSD development\\results\\WearGaitPD_dataset\\features\\bottomup_wrapper_feature_selection",
+    "source_best_configuration": "C:\\Users\\mirko\\OneDrive - Politecnico di Torino\\Desktop\\TESI\\Mirko Longagna\\GSD development\\results\\WearGaitPD_dataset\\features\\bottomup_wrapper_feature_selection\\5s_50p_overlap\\rf\\rf_BEST_configuration.csv"
+}
