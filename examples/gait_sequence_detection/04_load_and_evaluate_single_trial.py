@@ -93,6 +93,9 @@ ALGORITHM_SHORT_NAMES = {
 }
 
 
+REFERENCE_COLOR = "#111111"
+
+
 def resolve_cli_path(path_text: str | None) -> Path | None:
     if path_text is None:
         return None
@@ -258,29 +261,109 @@ def check_required_columns(df: pd.DataFrame, required_columns: list[str]) -> Non
         )
 
 
+
 def crop_by_time(
     df: pd.DataFrame,
     *,
     start_s: float,
     duration_s: float | None,
 ) -> pd.DataFrame:
+    """
+    Return a plotting segment while preserving time relative to trial start.
+    """
+
     if duration_s is None:
         out = df[df["time_s"] >= start_s].copy()
     else:
         end_s = start_s + duration_s
         out = df[(df["time_s"] >= start_s) & (df["time_s"] <= end_s)].copy()
 
-    out = out.reset_index(drop=True)
+    return out.reset_index(drop=True)
 
-    if not out.empty:
-        out["time_s"] = out["time_s"] - float(out["time_s"].iloc[0])
-
-    return out
 
 
 def zscore_for_plot(x: np.ndarray) -> np.ndarray:
     x = np.asarray(x, dtype=float)
     return (x - np.nanmean(x)) / (np.nanstd(x) + 1e-12)
+
+
+
+
+def build_reference_gs_list(
+    df: pd.DataFrame,
+    *,
+    sampling_rate_hz: float,
+    label_column: str = "generalevent",
+    walking_labels: list[str] | tuple[str, ...] = ("walk", "stairs", "turn"),
+) -> pd.DataFrame:
+    """
+    Build binary GSD reference intervals from WearGaitPD GeneralEvent labels.
+
+    For the binary static/walking GSD task, locomotor labels are considered
+    walking. By default:
+        walk, stairs, turn -> walking
+
+    Non-locomotor labels such as standing, chair and opendoor are not included.
+
+    Output columns match algorithm gs_list_:
+        start_s, end_s, start_samples, end_samples
+    """
+
+    output_columns = ["start_s", "end_s", "start_samples", "end_samples"]
+
+    if label_column not in df.columns:
+        print(f"[WARNING] Reference label column not found: {label_column}")
+        return pd.DataFrame(columns=output_columns)
+
+    walking_label_set = {
+        str(label).lower().strip()
+        for label in walking_labels
+    }
+
+    labels = df[label_column].astype(str).str.lower().str.strip()
+    walking_mask = labels.isin(walking_label_set).to_numpy(dtype=bool)
+
+    print(
+        "[INFO] Reference walking labels: "
+        + ", ".join(sorted(walking_label_set))
+    )
+
+    if walking_mask.size == 0 or not walking_mask.any():
+        return pd.DataFrame(columns=output_columns)
+
+    sample_indices = np.arange(len(df), dtype=int)
+
+    sequences = []
+    in_sequence = False
+    start_idx = None
+
+    for i, is_walking in enumerate(walking_mask):
+        if is_walking and not in_sequence:
+            in_sequence = True
+            start_idx = i
+
+        is_last = i == len(walking_mask) - 1
+
+        if in_sequence and ((not is_walking) or is_last):
+            end_idx = i if is_walking and is_last else i - 1
+
+            start_sample = int(sample_indices[start_idx])
+            end_sample = int(sample_indices[end_idx] + 1)
+
+            start_s = float(df["time_s"].iloc[start_idx])
+            end_s = float(df["time_s"].iloc[end_idx] + 1.0 / sampling_rate_hz)
+
+            sequences.append({
+                "start_s": start_s,
+                "end_s": end_s,
+                "start_samples": start_sample,
+                "end_samples": end_sample,
+            })
+
+            in_sequence = False
+            start_idx = None
+
+    return pd.DataFrame(sequences, columns=output_columns)
 
 
 def run_algorithms(
@@ -322,6 +405,8 @@ def run_algorithms(
     return results
 
 
+
+
 def plot_single_trial(
     trial_df: pd.DataFrame,
     algorithms: dict[str, object],
@@ -329,13 +414,27 @@ def plot_single_trial(
     trial_name: str,
     output_path: Path,
     max_bands: int,
+    show_reference: bool = False,
+    reference_gs_list: pd.DataFrame | None = None,
 ) -> None:
+    """
+    Plot IMU signals and detected/reference gait sequences.
+
+    Times are relative to the beginning of the original trial.
+    Gait-sequence intervals are clipped to the visible plotting window only for
+    visualization. The saved gs_list_ files remain unchanged.
+    """
+
     if trial_df.empty:
         raise ValueError("Selected trial segment is empty.")
 
+    visible_start = float(trial_df["time_s"].min())
+    visible_end = float(trial_df["time_s"].max())
+
     n_signal_rows = len(PLOT_SIGNAL_COLUMNS)
+    n_reference_rows = 1 if show_reference else 0
     n_algorithm_rows = len(algorithms)
-    n_rows = n_signal_rows + n_algorithm_rows
+    n_rows = n_signal_rows + n_reference_rows + n_algorithm_rows
 
     fig_height = max(8, 1.25 * n_rows)
 
@@ -360,8 +459,81 @@ def plot_single_trial(
 
     reference_signal = zscore_for_plot(trial_df["acc_vt"].to_numpy())
 
+    row_idx = n_signal_rows
+
+    if show_reference:
+        ax = axes[row_idx]
+        ax.plot(
+            time,
+            reference_signal,
+            linewidth=0.8,
+            color="black",
+            alpha=0.65,
+        )
+
+        if reference_gs_list is None:
+            reference_gs_list = pd.DataFrame(
+                columns=["start_s", "end_s", "start_samples", "end_samples"]
+            )
+
+        visible_ref = reference_gs_list[
+            (reference_gs_list["end_s"] >= visible_start)
+            & (reference_gs_list["start_s"] <= visible_end)
+        ].head(max_bands)
+
+        if visible_ref.empty:
+            ax.text(
+                0.01,
+                0.82,
+                "no REF",
+                transform=ax.transAxes,
+                fontsize=9,
+                color=REFERENCE_COLOR,
+                va="top",
+                ha="left",
+                bbox={
+                    "facecolor": "white",
+                    "edgecolor": REFERENCE_COLOR,
+                    "alpha": 0.85,
+                    "linewidth": 1.0,
+                },
+            )
+
+        for _, row in visible_ref.iterrows():
+            start = max(float(row["start_s"]), visible_start)
+            end = min(float(row["end_s"]), visible_end)
+
+            if end <= start:
+                continue
+
+            ax.axvspan(
+                start,
+                end,
+                facecolor=REFERENCE_COLOR,
+                alpha=0.14,
+                edgecolor=REFERENCE_COLOR,
+                linewidth=2.2,
+            )
+            ax.axvline(start, color=REFERENCE_COLOR, linewidth=1.6, alpha=0.95)
+            ax.axvline(end, color=REFERENCE_COLOR, linewidth=1.6, alpha=0.95)
+
+        ax.set_ylabel("REF")
+        ax.text(
+            0.995,
+            0.82,
+            f"REF={len(visible_ref)}",
+            transform=ax.transAxes,
+            fontsize=8,
+            color=REFERENCE_COLOR,
+            va="top",
+            ha="right",
+        )
+        ax.grid(True, alpha=0.25)
+
+        row_idx += 1
+
     for ax, (algorithm_name, algorithm) in zip(
-        axes[n_signal_rows:],
+        axes[row_idx:],
         algorithms.items(),
     ):
         color = ALGORITHM_COLORS.get(algorithm_name, "tab:gray")
@@ -374,11 +546,37 @@ def plot_single_trial(
             alpha=0.65,
         )
 
-        gs_list = algorithm.gs_list_.copy().head(max_bands)
+        gs_list = algorithm.gs_list_.copy()
 
-        for _, row in gs_list.iterrows():
-            start = float(row["start_s"])
-            end = float(row["end_s"])
+        visible_gs = gs_list[
+            (gs_list["end_s"] >= visible_start)
+            & (gs_list["start_s"] <= visible_end)
+        ].head(max_bands)
+
+        if visible_gs.empty:
+            ax.text(
+                0.01,
+                0.82,
+                "no GS",
+                transform=ax.transAxes,
+                fontsize=9,
+                color=color,
+                va="top",
+                ha="left",
+                bbox={
+                    "facecolor": "white",
+                    "edgecolor": color,
+                    "alpha": 0.85,
+                    "linewidth": 1.0,
+                },
+            )
+
+        for _, row in visible_gs.iterrows():
+            start = max(float(row["start_s"]), visible_start)
+            end = min(float(row["end_s"]), visible_end)
+
+            if end <= start:
+                continue
 
             ax.axvspan(
                 start,
@@ -391,10 +589,24 @@ def plot_single_trial(
             ax.axvline(start, color=color, linewidth=1.4, alpha=0.95)
             ax.axvline(end, color=color, linewidth=1.4, alpha=0.95)
 
-        ax.set_ylabel(ALGORITHM_SHORT_NAMES.get(algorithm_name, algorithm_name))
+        short_name = ALGORITHM_SHORT_NAMES.get(algorithm_name, algorithm_name)
+        ax.set_ylabel(short_name)
+        ax.text(
+            0.995,
+            0.82,
+            f"GS={len(visible_gs)}",
+            transform=ax.transAxes,
+            fontsize=8,
+            color=color,
+            va="top",
+            ha="right",
+        )
         ax.grid(True, alpha=0.25)
 
-    axes[-1].set_xlabel("Time from selected trial segment start [s]")
+    for ax in axes:
+        ax.set_xlim(visible_start, visible_end)
+
+    axes[-1].set_xlabel("Time from trial start [s]")
 
     fig.suptitle(
         f"GSD single-trial visual evaluation | {trial_name}",
@@ -429,6 +641,7 @@ def save_outputs(
         print(f"[SAVED] {gs_path}")
 
 
+
 def process_trial(
     trial_csv: Path,
     *,
@@ -438,6 +651,8 @@ def process_trial(
     start_s: float,
     duration_s: float | None,
     max_bands: int,
+    show_reference: bool,
+    reference_walking_labels: list[str],
 ) -> None:
     print("\n============================================================")
     print(f"[TRIAL] {trial_name}")
@@ -456,6 +671,27 @@ def process_trial(
 
     check_required_columns(trial_df, RAW_COLUMNS)
 
+    print(
+        f"[INFO] Full trial samples={len(trial_df)} | "
+        f"duration={trial_df['time_s'].max():.2f} s"
+    )
+
+    algorithms = run_algorithms(
+        trial_df,
+        sampling_rate_hz=sampling_rate_hz,
+    )
+
+    reference_gs_list = None
+
+    if show_reference:
+        reference_gs_list = build_reference_gs_list(
+            trial_df,
+            sampling_rate_hz=sampling_rate_hz,
+            label_column="generalevent",
+            walking_labels=reference_walking_labels,
+        )
+        print(f"[INFO] Reference walking sequences={len(reference_gs_list)}")
+
     segment_df = crop_by_time(
         trial_df,
         start_s=start_s,
@@ -466,13 +702,9 @@ def process_trial(
         raise ValueError("Selected segment is empty.")
 
     print(
-        f"[INFO] Selected segment samples={len(segment_df)} | "
-        f"duration={segment_df['time_s'].max():.2f} s"
-    )
-
-    algorithms = run_algorithms(
-        segment_df,
-        sampling_rate_hz=sampling_rate_hz,
+        f"[INFO] Plot segment samples={len(segment_df)} | "
+        f"start={segment_df['time_s'].min():.2f} s | "
+        f"end={segment_df['time_s'].max():.2f} s"
     )
 
     safe_name = trial_name.replace(" ", "_").replace("/", "_")
@@ -484,6 +716,8 @@ def process_trial(
         trial_name=trial_name,
         output_path=figure_path,
         max_bands=max_bands,
+        show_reference=show_reference,
+        reference_gs_list=reference_gs_list,
     )
 
     save_outputs(
@@ -491,6 +725,12 @@ def process_trial(
         trial_name=trial_name,
         output_dir=output_dir / "tables",
     )
+
+    if show_reference and reference_gs_list is not None:
+        ref_path = output_dir / "tables" / f"{safe_name}_reference_gs_list.csv"
+        ref_path.parent.mkdir(parents=True, exist_ok=True)
+        reference_gs_list.to_csv(ref_path, index=False)
+        print(f"[SAVED] {ref_path}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -512,6 +752,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--start-s", type=float, default=0.0)
     parser.add_argument("--duration-s", type=float, default=60.0)
     parser.add_argument("--max-bands", type=int, default=10)
+    parser.add_argument(
+        "--show-reference",
+        action="store_true",
+        help="Overlay WearGaitPD binary walking reference intervals from GeneralEvent.",
+    )
+    parser.add_argument(
+        "--reference-walking-labels",
+        nargs="+",
+        default=["walk", "stairs", "turn"],
+        help=(
+            "GeneralEvent labels considered as walking in the binary GSD reference. "
+            "Default: walk stairs turn."
+        ),
+    )
 
     return parser.parse_args()
 
@@ -540,6 +794,8 @@ def main() -> None:
             start_s=args.start_s,
             duration_s=args.duration_s,
             max_bands=args.max_bands,
+            show_reference=args.show_reference,
+            reference_walking_labels=args.reference_walking_labels,
         )
 
     if pd_trial_csv is not None:
@@ -551,6 +807,8 @@ def main() -> None:
             start_s=args.start_s,
             duration_s=args.duration_s,
             max_bands=args.max_bands,
+            show_reference=args.show_reference,
+            reference_walking_labels=args.reference_walking_labels,
         )
 
     if control_trial_csv is not None:
@@ -562,6 +820,8 @@ def main() -> None:
             start_s=args.start_s,
             duration_s=args.duration_s,
             max_bands=args.max_bands,
+            show_reference=args.show_reference,
+            reference_walking_labels=args.reference_walking_labels,
         )
 
 
