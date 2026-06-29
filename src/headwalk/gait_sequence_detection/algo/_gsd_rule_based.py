@@ -1,13 +1,11 @@
 """
 GsdRuleBased algorithm wrapper.
-
-The saved rule-based artifact is a joblib model produced during development.
-This wrapper exposes it with the same interface as the other GSD algorithms.
 """
 
 from __future__ import annotations
 
 import sys
+
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -18,7 +16,7 @@ from ._gsd_sklearn import GsdSklearnModel
 
 class RuleBasedGSDClassifier(BaseEstimator, ClassifierMixin):
     """
-    Compatibility class for loading the saved rule-based joblib artifact.
+    Compatibility class needed to load the saved rule-based joblib artifact.
     """
 
     def __init__(
@@ -43,12 +41,15 @@ class RuleBasedGSDClassifier(BaseEstimator, ClassifierMixin):
         X_imputed = self.imputer_.fit_transform(X_array)
 
         self.center_ = np.nanmedian(X_imputed, axis=0)
+
         q25 = np.nanpercentile(X_imputed, 25, axis=0)
         q75 = np.nanpercentile(X_imputed, 75, axis=0)
         iqr = q75 - q25
+
         self.scale_ = np.where(np.abs(iqr) < 1e-12, 1.0, iqr)
 
         train_scores = self.decision_function(X)
+
         self.threshold_ = float(
             np.quantile(train_scores, self.threshold_quantile)
         )
@@ -83,7 +84,8 @@ class GsdRuleBased(GsdSklearnModel):
     expected_model_name = "rule_based"
 
     def __init__(self, artifact_dir=None):
-        # If the joblib artifact was saved while the training script was run as
-        # __main__, pickle needs to find RuleBasedGSDClassifier there.
-        sys.modules["__main__"].RuleBasedGSDClassifier = RuleBasedGSDClassifier
+        main_module = sys.modules.get("__main__")
+        if main_module is not None:
+            setattr(main_module, "RuleBasedGSDClassifier", RuleBasedGSDClassifier)
+
         super().__init__(artifact_dir=artifact_dir)

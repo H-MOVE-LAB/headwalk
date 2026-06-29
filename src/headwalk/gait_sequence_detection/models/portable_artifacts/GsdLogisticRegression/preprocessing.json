@@ -7,6 +7,19 @@
     "step_samples": 500,
     "input_signal_type": "handcrafted_feature_table",
     "expected_raw_columns": [
+        "acc_vt",
+        "acc_ml",
+        "acc_ap",
+        "gyr_vt",
+        "gyr_ml",
+        "gyr_ap"
+    ],
+    "label_map": {
+        "0": "static",
+        "1": "walking"
+    },
+    "notes": "Classical sklearn models expect the selected handcrafted features listed in config.json. The CNN expects raw accelerometer windows.",
+    "feature_channel_names": [
         "acc_VT",
         "acc_ML",
         "acc_AP",
@@ -14,9 +27,6 @@
         "gyr_ML",
         "gyr_AP"
     ],
-    "label_map": {
-        "0": "static",
-        "1": "walking"
-    },
-    "notes": "Classical sklearn models expect the selected handcrafted features listed in config.json. The CNN expects raw accelerometer windows."
+    "raw_column_naming_convention": "lowercase",
+    "feature_name_convention": "legacy training feature names are preserved for model compatibility"
 }

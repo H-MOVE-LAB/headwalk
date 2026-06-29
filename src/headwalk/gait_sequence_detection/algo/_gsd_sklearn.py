@@ -1,18 +1,15 @@
 """
 Shared sklearn-based implementation for portable GSD artifacts.
 
-Portable artifact layout:
+Public method:
+    detect(...)
 
+Portable artifact layout:
     portable_artifacts/<ModelName>/
         config.json
         metadata.json
         model.joblib
         preprocessing.json
-
-The saved sklearn model receives handcrafted window-level features as input.
-This wrapper can either:
-1. predict from an already computed feature table;
-2. build sliding windows from a preprocessed IMU signal and compute features.
 """
 
 from __future__ import annotations
@@ -25,7 +22,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from .base import BaseGsdAlgorithm, GsdPredictionResult
+from .base import BaseGsdAlgorithm
 
 
 DEFAULT_LABEL_NAME_MAP = {
@@ -35,19 +32,7 @@ DEFAULT_LABEL_NAME_MAP = {
 
 
 class GsdSklearnModel(BaseGsdAlgorithm):
-    """
-    Base class for GSD models trained with sklearn-compatible estimators.
-
-    If artifact_dir is not provided, the class automatically searches in:
-
-        src/headwalk/gait_sequence_detection/models/portable_artifacts/<ClassName>
-
-    Example
-    -------
-    GsdSvm() loads:
-
-        models/portable_artifacts/GsdSvm/
-    """
+    """Base class for GSD models trained with sklearn-compatible estimators."""
 
     expected_model_name: str | None = None
 
@@ -62,50 +47,51 @@ class GsdSklearnModel(BaseGsdAlgorithm):
 
         self.artifact_dir = Path(artifact_dir)
 
-        self.config_path = self.artifact_dir / "config.json"
-        self.metadata_path = self.artifact_dir / "metadata.json"
-        self.preprocessing_path = self.artifact_dir / "preprocessing.json"
+        self.config = self._load_json(self.artifact_dir / "config.json")
+        self.metadata = self._load_json(self.artifact_dir / "metadata.json")
+        self.preprocessing = self._load_json(self.artifact_dir / "preprocessing.json")
 
-        self._validate_json_files()
+        self._validate_model_identity()
 
-        self.config = self._load_json(self.config_path)
-        self.metadata = self._load_json(self.metadata_path)
-        self.preprocessing = self._load_json(self.preprocessing_path)
-
-        model_filename = self.config.get("model_filename", "model.joblib")
-        self.model_path = self.artifact_dir / model_filename
+        self.model_path = self.artifact_dir / self.config.get(
+            "model_filename",
+            "model.joblib",
+        )
 
         if not self.model_path.exists():
             raise FileNotFoundError(f"Model file not found: {self.model_path}")
 
-        artifact_format = self.config.get("artifact_format", "joblib")
-        if artifact_format != "joblib":
+        if self.config.get("artifact_format", "joblib") != "joblib":
             raise ValueError(
-                f"{self.__class__.__name__} expects a joblib sklearn artifact, "
-                f"but artifact_format={artifact_format!r}."
+                f"{self.__class__.__name__} expects a joblib artifact."
             )
-
-        self._validate_model_identity()
 
         self.model = joblib.load(self.model_path)
 
         self.selected_features = self.config.get("selected_features", [])
         if not self.selected_features:
             raise ValueError(
-                f"No selected_features found in config.json: {self.config_path}"
+                f"No selected_features found in {self.artifact_dir / 'config.json'}"
             )
 
-        self.fs = float(
-            self.preprocessing.get(
-                "sampling_rate_hz",
-                self.preprocessing.get("sampling_frequency_hz", 100.0),
-            )
+        self.fs = float(self.preprocessing.get("sampling_rate_hz", 100.0))
+
+        self.raw_channel_names = self.preprocessing.get(
+            "expected_raw_columns",
+            ["acc_vt", "acc_ml", "acc_ap", "gyr_vt", "gyr_ml", "gyr_ap"],
         )
 
-        self.channel_names = self.preprocessing.get(
-            "expected_raw_columns",
+        self.feature_channel_names = self.preprocessing.get(
+            "feature_channel_names",
             ["acc_VT", "acc_ML", "acc_AP", "gyr_VT", "gyr_ML", "gyr_AP"],
         )
+
+        # Backward-compatible attribute name.
+        self.channel_names = self.raw_channel_names
+
+        self.window_length_s = float(self.preprocessing.get("window_duration_s", 1.0))
+        self.overlap_fraction = float(self.preprocessing.get("overlap_fraction", 0.5))
+        self.window_config = self.config.get("window_config")
 
         self.label_name_map = (
             self.metadata.get("label_map")
@@ -118,79 +104,89 @@ class GsdSklearnModel(BaseGsdAlgorithm):
             for k, v in self.label_name_map.items()
         }
 
-        self.window_length_s = float(
-            self.preprocessing.get(
-                "window_duration_s",
-                self.preprocessing.get("window_length_s", 1.0),
-            )
-        )
-
-        self.overlap_fraction = float(
-            self.preprocessing.get("overlap_fraction", 0.5)
-        )
-
-        self.window_config = self.config.get(
-            "window_config",
-            self.preprocessing.get("window_config"),
-        )
-
     @staticmethod
     def _load_json(path: Path) -> Any:
+        if not path.exists():
+            raise FileNotFoundError(f"Missing JSON file: {path}")
+
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-
-    def _validate_json_files(self) -> None:
-        missing_files = [
-            path for path in [
-                self.config_path,
-                self.metadata_path,
-                self.preprocessing_path,
-            ]
-            if not path.exists()
-        ]
-
-        if missing_files:
-            missing_text = "\n".join(str(path) for path in missing_files)
-            raise FileNotFoundError(
-                "Incomplete GSD portable artifact folder. Missing files:\n"
-                f"{missing_text}"
-            )
 
     def _validate_model_identity(self) -> None:
         if self.expected_model_name is None:
             return
 
-        source_model_name = str(
-            self.config.get("source_model_name", "")
-        ).lower()
+        source_model_name = str(self.config.get("source_model_name", "")).lower()
 
         if source_model_name != self.expected_model_name:
             raise ValueError(
                 "The loaded artifact does not match this algorithm class. "
-                f"Expected source_model_name={self.expected_model_name!r}, "
-                f"found {source_model_name!r}."
+                f"Expected {self.expected_model_name!r}, found {source_model_name!r}."
             )
+
+    @staticmethod
+    def _normalize_dataframe_columns(data: pd.DataFrame) -> pd.DataFrame:
+        """Force dataframe column names to lowercase snake-case."""
+
+        out = data.copy()
+        out.columns = [
+            str(col).strip().replace(" ", "_").replace("-", "_").lower()
+            for col in out.columns
+        ]
+
+        return out
+
+    def _data_to_array(
+        self,
+        data,
+        *,
+        acc_columns: list[str] | None,
+        gyr_columns: list[str] | None,
+    ) -> np.ndarray:
+        """Convert input IMU signal to samples x channels array."""
+
+        if isinstance(data, pd.DataFrame):
+            data = self._normalize_dataframe_columns(data)
+
+            if acc_columns is not None or gyr_columns is not None:
+                columns = [
+                    str(col).strip().replace(" ", "_").replace("-", "_").lower()
+                    for col in ((acc_columns or []) + (gyr_columns or []))
+                ]
+            else:
+                columns = self.raw_channel_names
+
+            missing = [col for col in columns if col not in data.columns]
+            if missing:
+                raise KeyError(
+                    f"Missing input signal columns: {missing}. "
+                    f"Available columns: {list(data.columns)}"
+                )
+
+            return data[columns].to_numpy(dtype=float)
+
+        signal = np.asarray(data, dtype=float)
+
+        if signal.ndim != 2:
+            raise ValueError("Input signal must be samples x channels.")
+
+        return signal
 
     def _build_sliding_windows(
         self,
         signal: np.ndarray,
     ) -> tuple[np.ndarray, list[dict[str, float]]]:
-        """
-        Create overlapping windows from a preprocessed IMU signal.
-
-        The signal must already be aligned and filtered consistently with the
-        training pipeline.
-        """
+        """Create overlapping windows from a preprocessed IMU signal."""
 
         signal = np.asarray(signal, dtype=float)
 
         if signal.ndim != 2:
-            raise ValueError("signal must be a 2D array with shape samples x channels.")
+            raise ValueError("Input signal must be samples x channels.")
 
-        if signal.shape[1] != len(self.channel_names):
+        if signal.shape[1] != len(self.raw_channel_names):
             raise ValueError(
                 "The signal channel count does not match the artifact schema. "
-                f"Signal columns={signal.shape[1]}, expected={len(self.channel_names)}."
+                f"Signal columns={signal.shape[1]}, expected={len(self.raw_channel_names)}."
             )
 
         window_size = int(round(self.window_length_s * self.fs))
@@ -199,8 +195,7 @@ class GsdSklearnModel(BaseGsdAlgorithm):
 
         if len(signal) < window_size:
             raise ValueError(
-                "Signal is shorter than one GSD window. "
-                f"Signal samples={len(signal)}, window_size={window_size}."
+                f"Signal is shorter than one GSD window: {len(signal)} < {window_size}."
             )
 
         windows = []
@@ -221,35 +216,58 @@ class GsdSklearnModel(BaseGsdAlgorithm):
 
         return np.asarray(windows), rows
 
-    def _compute_feature_table_from_signal(self, signal: np.ndarray) -> pd.DataFrame:
+    def _detect_from_signal(self, signal: np.ndarray) -> pd.DataFrame:
         """
-        Compute window-level features from a preprocessed IMU signal.
-
-        The feature implementation is imported here, not at module import time,
-        so feature-table prediction remains usable even when optional feature
-        dependencies are not needed immediately.
+        Build handcrafted features from signal and run estimator.
         """
 
         from ..features import compute_window_features
 
         windows, metadata_rows = self._build_sliding_windows(signal)
+
         rows = []
 
         for window, metadata_row in zip(windows, metadata_rows):
             feature_row = compute_window_features(
                 window=window,
                 fs=self.fs,
-                channel_names=self.channel_names,
+                channel_names=self.feature_channel_names,
             )
             feature_row.update(metadata_row)
             rows.append(feature_row)
 
-        return pd.DataFrame(rows)
+        feature_table = pd.DataFrame(rows)
+
+        return self._detect_from_feature_table(feature_table)
+
+    def _ensure_window_metadata(self, feature_table: pd.DataFrame) -> pd.DataFrame:
+        """Ensure that a feature table has window timing columns."""
+
+        table = feature_table.copy()
+
+        window_size = int(round(self.window_length_s * self.fs))
+        step_size = int(round(window_size * (1.0 - self.overlap_fraction)))
+        step_size = max(step_size, 1)
+
+        if "window_start_sample" not in table.columns:
+            table["window_start_sample"] = np.arange(len(table)) * step_size
+
+        if "window_end_sample" not in table.columns:
+            table["window_end_sample"] = table["window_start_sample"] + window_size
+
+        if "window_start_time" not in table.columns:
+            table["window_start_time"] = table["window_start_sample"] / self.fs
+
+        if "window_end_time" not in table.columns:
+            table["window_end_time"] = table["window_end_sample"] / self.fs
+
+        if "window_duration_s" not in table.columns:
+            table["window_duration_s"] = self.window_length_s
+
+        return table
 
     def _select_model_input(self, feature_table: pd.DataFrame) -> pd.DataFrame:
-        """
-        Select and order exactly the features expected by the saved model.
-        """
+        """Select and order exactly the features expected by the saved model."""
 
         missing_features = [
             feature for feature in self.selected_features
@@ -260,88 +278,81 @@ class GsdSklearnModel(BaseGsdAlgorithm):
             preview = ", ".join(missing_features[:20])
             raise KeyError(
                 "The feature table does not contain all selected features. "
-                f"Missing {len(missing_features)} feature(s). "
-                f"First missing values: {preview}"
+                f"Missing {len(missing_features)} feature(s): {preview}"
             )
 
         return feature_table[self.selected_features].copy()
 
-    def _predict_probabilities_if_available(
-        self,
-        X: pd.DataFrame,
-    ) -> dict[str, np.ndarray]:
+    def _detect_from_feature_table(self, feature_table: pd.DataFrame) -> pd.DataFrame:
         """
-        Return class probabilities when the model exposes predict_proba().
+        Run estimator inference and return window-level detections.
         """
 
-        if not hasattr(self.model, "predict_proba"):
-            return {}
-
-        probabilities = self.model.predict_proba(X)
-
-        output = {}
-
-        if probabilities.ndim == 2 and probabilities.shape[1] >= 2:
-            output["gsd_probability_static"] = probabilities[:, 0]
-            output["gsd_probability_walking"] = probabilities[:, 1]
-
-        return output
-
-    def predict_from_feature_table(
-        self,
-        feature_table: pd.DataFrame,
-    ) -> GsdPredictionResult:
-        """
-        Predict static/walking labels from an already computed feature table.
-        """
+        feature_table = self._ensure_window_metadata(feature_table)
 
         X = self._select_model_input(feature_table)
 
-        y_pred = np.asarray(self.model.predict(X)).astype(int)
+        detected_labels = np.asarray(self.model.predict(X)).astype(int)
 
-        predictions = feature_table.copy()
-        predictions["gsd_prediction"] = y_pred
-        predictions["gsd_prediction_name"] = [
+        window_detections = feature_table.copy()
+        window_detections["gsd_label"] = detected_labels
+        window_detections["gsd_label_name"] = [
             self.label_name_map.get(int(label), "unknown")
-            for label in y_pred
+            for label in detected_labels
         ]
 
-        probability_columns = self._predict_probabilities_if_available(X)
-        for column_name, values in probability_columns.items():
-            predictions[column_name] = values
+        if hasattr(self.model, "predict_proba"):
+            probabilities = self.model.predict_proba(X)
+            if probabilities.ndim == 2 and probabilities.shape[1] >= 2:
+                window_detections["gsd_probability_static"] = probabilities[:, 0]
+                window_detections["gsd_probability_walking"] = probabilities[:, 1]
 
-        predictions["gsd_model_class"] = self.config.get(
+        window_detections["gsd_model_class"] = self.config.get(
             "class_name",
             self.__class__.__name__,
         )
-        predictions["gsd_source_model_name"] = self.config.get("source_model_name")
-        predictions["gsd_window_config"] = self.window_config
-        predictions["gsd_artifact_dir"] = str(self.artifact_dir)
+        window_detections["gsd_source_model_name"] = self.config.get("source_model_name")
+        window_detections["gsd_window_config"] = self.window_config
+        window_detections["gsd_artifact_dir"] = str(self.artifact_dir)
 
-        return GsdPredictionResult(
-            predictions=predictions,
-            artifact_dir=self.artifact_dir,
-            metadata={
-                "config": self.config,
-                "metadata": self.metadata,
-                "preprocessing": self.preprocessing,
-            },
+        return window_detections
+
+    def _detect_windows(
+        self,
+        data,
+        *,
+        sampling_rate_hz: float | None,
+        feature_table: pd.DataFrame | None,
+        acc_columns: list[str] | None,
+        gyr_columns: list[str] | None,
+        time_column: str | None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        Sklearn specialization of BaseGsdAlgorithm.detect().
+        """
+
+        if sampling_rate_hz is not None:
+            self.fs = float(sampling_rate_hz)
+
+        if feature_table is not None:
+            return self._detect_from_feature_table(feature_table)
+
+        if data is None:
+            raise ValueError("Either data or feature_table must be provided.")
+
+        signal = self._data_to_array(
+            data,
+            acc_columns=acc_columns,
+            gyr_columns=gyr_columns,
         )
 
-    def predict_from_signal(self, signal, time=None) -> GsdPredictionResult:
-        """
-        Predict GSD labels from a preprocessed IMU signal.
+        return self._detect_from_signal(signal)
 
-        Important
-        ---------
-        The signal must already be in the same aligned convention used during
-        training. This class does not redo dataset-specific gravity alignment,
-        pitch-roll correction, filtering or gap filling.
-        """
-
-        feature_table = self._compute_feature_table_from_signal(signal)
-
-        if time is not None:
-            feature_table["input_time_available"] = True
-
-        return self.predict_from_feature_table(feature_table)
+    def get_detection_metadata(self) -> dict[str, Any]:
+        return {
+            "algorithm_class": self.__class__.__name__,
+            "config": self.config,
+            "metadata": self.metadata,
+            "preprocessing": self.preprocessing,
+        }

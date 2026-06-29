@@ -7,12 +7,12 @@
     "step_samples": 250,
     "input_signal_type": "raw_accelerometer_windows",
     "expected_raw_columns": [
-        "acc_VT",
-        "acc_ML",
-        "acc_AP",
-        "gyr_VT",
-        "gyr_ML",
-        "gyr_AP"
+        "acc_vt",
+        "acc_ml",
+        "acc_ap",
+        "gyr_vt",
+        "gyr_ml",
+        "gyr_ap"
     ],
     "label_map": {
         "0": "static",
@@ -55,5 +55,15 @@
                 ]
             ]
         ]
-    }
+    },
+    "feature_channel_names": [
+        "acc_VT",
+        "acc_ML",
+        "acc_AP",
+        "gyr_VT",
+        "gyr_ML",
+        "gyr_AP"
+    ],
+    "raw_column_naming_convention": "lowercase",
+    "feature_name_convention": "legacy training feature names are preserved for model compatibility"
 }
