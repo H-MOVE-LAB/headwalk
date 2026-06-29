@@ -1,0 +1,16 @@
+{
+    "class_name": "GsdGaussianNaiveBayes",
+    "source_model_name": "gnb",
+    "model_filename": "model.joblib",
+    "artifact_format": "joblib",
+    "window_config": "5s_50p_overlap",
+    "n_features": 2,
+    "selected_features": [
+        "acc_VT_p90",
+        "acc_VT_mad"
+    ],
+    "best_params": {
+        "var_smoothing": 1.771884735480686e-08,
+        "prior_mode": "balanced"
+    }
+}

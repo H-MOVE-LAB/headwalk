@@ -1,0 +1,18 @@
+{
+    "class_name": "GsdCnn1D",
+    "source_model_name": "cnn1d",
+    "model_filename": "model.keras",
+    "artifact_format": "keras",
+    "window_config": "5s_50p_overlap",
+    "n_features": 1,
+    "selected_features": [
+        "raw_window_signal_acc_axes"
+    ],
+    "best_params": {
+        "hidden_units": 32,
+        "dropout": 0.2,
+        "learning_rate": 0.004321554978474203,
+        "batch_size": 64,
+        "max_epochs": 32
+    }
+}

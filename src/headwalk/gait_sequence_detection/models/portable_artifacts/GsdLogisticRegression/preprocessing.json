@@ -1,0 +1,22 @@
+{
+    "window_config": "10s_50p_overlap",
+    "sampling_rate_hz": 100.0,
+    "window_duration_s": 10.0,
+    "window_samples": 1000,
+    "overlap_fraction": 0.5,
+    "step_samples": 500,
+    "input_signal_type": "handcrafted_feature_table",
+    "expected_raw_columns": [
+        "acc_VT",
+        "acc_ML",
+        "acc_AP",
+        "gyr_VT",
+        "gyr_ML",
+        "gyr_AP"
+    ],
+    "label_map": {
+        "0": "static",
+        "1": "walking"
+    },
+    "notes": "Classical sklearn models expect the selected handcrafted features listed in config.json. The CNN expects raw accelerometer windows."
+}

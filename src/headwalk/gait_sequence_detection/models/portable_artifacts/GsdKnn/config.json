@@ -1,0 +1,19 @@
+{
+    "class_name": "GsdKnn",
+    "source_model_name": "knn",
+    "model_filename": "model.joblib",
+    "artifact_format": "joblib",
+    "window_config": "5s_50p_overlap",
+    "n_features": 4,
+    "selected_features": [
+        "acc_VT_p90",
+        "acc_VT_mad",
+        "acc_VT_abs_dev",
+        "acc_VT_std"
+    ],
+    "best_params": {
+        "n_neighbors": 16,
+        "weights": "distance",
+        "p": 1
+    }
+}

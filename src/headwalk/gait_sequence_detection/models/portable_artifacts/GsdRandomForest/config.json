@@ -1,0 +1,19 @@
+{
+    "class_name": "GsdRandomForest",
+    "source_model_name": "rf",
+    "model_filename": "model.joblib",
+    "artifact_format": "joblib",
+    "window_config": "5s_50p_overlap",
+    "n_features": 4,
+    "selected_features": [
+        "acc_VT_p90",
+        "acc_VT_mad",
+        "acc_VT_abs_dev",
+        "acc_VT_std"
+    ],
+    "best_params": {
+        "n_estimators": 200,
+        "max_depth": null,
+        "min_samples_leaf": 7
+    }
+}

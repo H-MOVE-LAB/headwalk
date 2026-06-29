@@ -1,0 +1,19 @@
+{
+    "class_name": "GsdLogisticRegression",
+    "source_model_name": "lr",
+    "model_filename": "model.joblib",
+    "artifact_format": "joblib",
+    "window_config": "10s_50p_overlap",
+    "n_features": 6,
+    "selected_features": [
+        "acc_norm_p10",
+        "acc_norm_p25",
+        "acc_VT_p90",
+        "acc_VT_mad",
+        "acc_VT_p25",
+        "acc_VT_abs_dev"
+    ],
+    "best_params": {
+        "C": 21.42302175774105
+    }
+}
