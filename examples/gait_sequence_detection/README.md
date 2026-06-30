@@ -651,3 +651,33 @@ For labelled datasets, a stricter rule can be applied:
 
 For raw inference, labels are usually unavailable, so only signal-quality based
 filtering can be applied.
+
+04_load_and_evaluate_single_trial.py
+
+This is the visual evaluation example.
+
+It uses the same schema-based single-trial input adapter as the minimal apply
+example. Therefore, raw IMU column selection and preprocessing are handled in
+the same way in both scripts.
+
+It shows how to:
+
+    1. load one or two raw trials;
+    2. select the head-worn IMU sensor automatically or explicitly;
+    3. apply the current head-IMU preprocessing;
+    4. run one or more GSD algorithms;
+    5. optionally remove low-quality windows using the IMU quality mask;
+    6. optionally build a binary reference from trial labels;
+    7. plot IMU signals and detected gait sequences;
+    8. save `window_detections_`, `gs_list_` and optional reference tables.
+
+The visual output contains stacked rows:
+
+    preprocessed IMU signals
+    optional REF row
+    one row per GSD algorithm
+
+Detected gait sequences are shown as shaded bands.
+
+The reference row is optional. The algorithms do not require reference labels.
+
