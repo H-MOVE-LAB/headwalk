@@ -25,6 +25,21 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 
+DEFAULT_PD_TRIAL_CSV = (
+    PROJECT_ROOT
+    / "example_data"
+    / "gait_sequence_detection"
+    / "weargaitpd_pd_freewalk_nls192.csv"
+)
+
+DEFAULT_CONTROL_TRIAL_CSV = (
+    PROJECT_ROOT
+    / "example_data"
+    / "gait_sequence_detection"
+    / "weargaitpd_control_freewalk_whc021.csv"
+)
+
+
 from headwalk.gait_sequence_detection.algo import (  # noqa: E402
     GsdSvm,
     GsdRandomForest,
@@ -739,8 +754,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trial-csv", type=str, default=None)
     parser.add_argument("--trial-name", type=str, default="single_trial")
 
-    parser.add_argument("--pd-trial-csv", type=str, default=None)
-    parser.add_argument("--control-trial-csv", type=str, default=None)
+    parser.add_argument("--pd-trial-csv", type=str, default=str(DEFAULT_PD_TRIAL_CSV))
+    parser.add_argument("--control-trial-csv", type=str, default=str(DEFAULT_CONTROL_TRIAL_CSV))
 
     parser.add_argument("--sampling-rate-hz", type=float, default=100.0)
     parser.add_argument(
