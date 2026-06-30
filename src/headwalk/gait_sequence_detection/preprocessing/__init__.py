@@ -21,4 +21,6 @@ from headwalk.gait_sequence_detection.preprocessing._quality import (
     compute_walkway_contact_quality_mask,
     compute_weargait_quality_masks,
     find_walkway_contact_columns,
+    window_is_accepted_by_final_quality,
+    window_is_accepted_by_quality_only,
 )

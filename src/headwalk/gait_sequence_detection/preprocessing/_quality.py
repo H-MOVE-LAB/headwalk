@@ -409,3 +409,75 @@ def find_walkway_contact_columns(
             break
 
     return left_column, right_column
+
+
+def window_is_accepted_by_final_quality(
+    labels: np.ndarray,
+    final_quality: np.ndarray,
+    start: int,
+    window_size: int,
+    none_label_value: int = -1,
+) -> bool:
+    """
+    Return True only if a GSD window is fully valid.
+
+    A window is accepted only when:
+    1. it lies completely inside the signal;
+    2. all samples have final_quality == True;
+    3. no sample has the none / invalid label.
+
+    Notes
+    -----
+    final_quality is expected to be:
+    - imu_quality for datasets/tasks without instrumented walkway quality;
+    - imu_quality AND walkway_quality for datasets/tasks where
+      use_walkway_quality=True.
+
+    This function is intended for labelled dataset construction and validation.
+    For completely raw, unlabelled inference, labels may not be available; in
+    that case only the quality-mask part can be applied by the caller.
+    """
+
+    labels = np.asarray(labels)
+    final_quality = np.asarray(final_quality, dtype=bool)
+
+    stop = int(start) + int(window_size)
+
+    if start < 0:
+        return False
+
+    if stop > len(labels) or stop > len(final_quality):
+        return False
+
+    if not np.all(final_quality[start:stop]):
+        return False
+
+    if np.any(labels[start:stop] == none_label_value):
+        return False
+
+    return True
+
+
+def window_is_accepted_by_quality_only(
+    final_quality: np.ndarray,
+    start: int,
+    window_size: int,
+) -> bool:
+    """
+    Return True only if all samples in an unlabelled window are high quality.
+
+    This variant is useful for raw inference, where no sample-wise labels exist.
+    It does not check none labels because they are unavailable.
+    """
+
+    final_quality = np.asarray(final_quality, dtype=bool)
+
+    stop = int(start) + int(window_size)
+
+    if start < 0:
+        return False
+
+    if stop > len(final_quality):
+        return False
+
+    return bool(np.all(final_quality[start:stop]))
