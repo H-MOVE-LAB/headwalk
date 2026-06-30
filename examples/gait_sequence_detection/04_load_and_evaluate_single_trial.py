@@ -760,10 +760,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--reference-walking-labels",
         nargs="+",
-        default=["walk", "stairs", "turn"],
+        default=[
+            "walk",
+            "walking",
+            "stair",
+            "stairs",
+            "ascend",
+            "ascending",
+            "descend",
+            "descending",
+            "upstairs",
+            "downstairs",
+            "turn",
+            "turning",
+        ],
         help=(
             "GeneralEvent labels considered as walking in the binary GSD reference. "
-            "Default: walk stairs turn."
+            "Default: walk walking stair stairs ascend ascending descend descending upstairs downstairs turn turning."
         ),
     )
 
