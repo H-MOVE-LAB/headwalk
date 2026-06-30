@@ -3,29 +3,33 @@
 # This script demonstrates the raw inference workflow:
 #
 #     raw trial
+#         -> generic IMU column selection
 #         -> preprocessing
 #         -> algorithm.detect(...)
 #         -> algorithm.gs_list_
 #
-# It does not build a reference and does not plot results. It is intended as the
-# simplest example of how to call the GSD algorithms on a single trial.
+# The input adapter is schema-based, not dataset-name-based. If the raw file
+# contains multiple IMU sensors, the user should specify the head-worn sensor
+# with --sensor-prefix or with explicit --acc-columns / --gyr-columns.
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import re
 import sys
 
-import numpy as np
 import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = PROJECT_ROOT / "src"
+EXAMPLE_DIR = Path(__file__).resolve().parent
 
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
+
+if str(EXAMPLE_DIR) not in sys.path:
+    sys.path.insert(0, str(EXAMPLE_DIR))
 
 
 DEFAULT_TRIAL_CSV = (
@@ -36,6 +40,13 @@ DEFAULT_TRIAL_CSV = (
 )
 
 
+from _single_trial_input import (  # noqa: E402
+    load_trial_csv,
+    parse_time_column_to_seconds,
+    resolve_cli_path,
+    standardize_single_trial_imu,
+)
+
 from headwalk.gait_sequence_detection.algo import (  # noqa: E402
     GsdSvm,
     GsdRandomForest,
@@ -45,20 +56,6 @@ from headwalk.gait_sequence_detection.algo import (  # noqa: E402
     GsdRuleBased,
     GsdCnn1D,
 )
-
-from headwalk.gait_sequence_detection.preprocessing import (  # noqa: E402
-    preprocess_head_imu_trial,
-)
-
-
-STANDARD_COLUMNS = [
-    "acc_vt",
-    "acc_ml",
-    "acc_ap",
-    "gyr_vt",
-    "gyr_ml",
-    "gyr_ap",
-]
 
 
 ALGORITHM_CLASSES = {
@@ -72,188 +69,6 @@ ALGORITHM_CLASSES = {
 }
 
 
-def resolve_cli_path(path_text: str | None) -> Path | None:
-    """Accept both Windows paths and Git-Bash-like /f/... paths."""
-
-    if path_text is None:
-        return None
-
-    text = str(path_text).strip().strip('"').strip("'")
-
-    if re.match(r"^/[A-Za-z]/", text):
-        drive = text[1].upper()
-        rest = text[2:]
-        return Path(f"{drive}:{rest}")
-
-    return Path(text)
-
-
-def normalize_column_name(name: str) -> str:
-    """Normalize column names to lowercase snake-case."""
-
-    return (
-        str(name)
-        .strip()
-        .replace(" ", "_")
-        .replace("-", "_")
-        .replace(":", "_")
-        .lower()
-    )
-
-
-def load_trial_csv(path: Path) -> pd.DataFrame:
-    """Load a single-trial CSV and normalize column names."""
-
-    if not path.exists():
-        raise FileNotFoundError(f"Trial CSV not found: {path}")
-
-    df = pd.read_csv(path, low_memory=False)
-    df = df.copy()
-    df.columns = [normalize_column_name(col) for col in df.columns]
-
-    return df
-
-
-def parse_time_column_to_seconds(
-    df: pd.DataFrame,
-    *,
-    sampling_rate_hz: float,
-) -> pd.DataFrame:
-    """Create a numeric time_s column when possible."""
-
-    df = df.copy()
-
-    if "time_s" in df.columns:
-        df["time_s"] = pd.to_numeric(df["time_s"], errors="coerce")
-        return df
-
-    if "time" in df.columns:
-        extracted = (
-            df["time"]
-            .astype(str)
-            .str.extract(r"([-+]?\d*\.?\d+)", expand=False)
-        )
-        df["time_s"] = pd.to_numeric(extracted, errors="coerce")
-
-        if df["time_s"].notna().any():
-            return df
-
-    df["time_s"] = np.arange(len(df)) / sampling_rate_hz
-
-    return df
-
-
-def standardize_head_imu_columns(
-    df: pd.DataFrame,
-    *,
-    sampling_rate_hz: float,
-) -> pd.DataFrame:
-    """
-    Return a dataframe containing the standardized GSD IMU columns.
-
-    If the dataframe already contains:
-        acc_vt, acc_ml, acc_ap, gyr_vt, gyr_ml, gyr_ap
-
-    these columns are used directly.
-
-    Otherwise, the function expects compact WearGaitPD-style Forehead columns:
-        Forehead_Acc_X/Y/Z
-        Forehead_Gyr_X/Y/Z
-
-    and applies the current head-IMU preprocessing before creating the
-    standardized columns.
-    """
-
-    df = df.copy()
-
-    if all(col in df.columns for col in STANDARD_COLUMNS):
-        for col in STANDARD_COLUMNS:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-        print("[INFO] Using existing standardized IMU columns.")
-        return df
-
-    raw_acc_columns = [
-        "forehead_acc_x",
-        "forehead_acc_y",
-        "forehead_acc_z",
-    ]
-
-    raw_gyr_columns = [
-        "forehead_gyr_x",
-        "forehead_gyr_y",
-        "forehead_gyr_z",
-    ]
-
-    missing_sources = [
-        col for col in raw_acc_columns + raw_gyr_columns
-        if col not in df.columns
-    ]
-
-    if missing_sources:
-        raise KeyError(
-            "Cannot standardize the input trial. Expected either the "
-            "standardized columns "
-            f"{STANDARD_COLUMNS} or compact Forehead IMU columns. "
-            f"Missing raw columns: {missing_sources}"
-        )
-
-    acc_raw = df[raw_acc_columns].apply(
-        pd.to_numeric,
-        errors="coerce",
-    ).to_numpy(dtype=float)
-
-    gyr_raw = df[raw_gyr_columns].apply(
-        pd.to_numeric,
-        errors="coerce",
-    ).to_numpy(dtype=float)
-
-    print("[INFO] Applying current head-IMU preprocessing.")
-    print("[INFO] Raw Acc order: Forehead_Acc_X, Forehead_Acc_Y, Forehead_Acc_Z")
-    print("[INFO] Raw Gyr order: Forehead_Gyr_X, Forehead_Gyr_Y, Forehead_Gyr_Z")
-    print("[INFO] Acc unit kept as m/s^2 for the compact WearGaitPD example data.")
-
-    preprocessing_result = preprocess_head_imu_trial(
-        acc_raw=acc_raw,
-        gyr_raw=gyr_raw,
-        fs=sampling_rate_hz,
-        static_duration_s=1.0,
-        static_reference_mask=None,
-        fixed_axis_transform=None,
-        acc_input_unit="m/s2",
-        acc_output_unit="m/s2",
-        gyr_scale_factor=1.0,
-        lowpass_cutoff_hz=15.0,
-    )
-
-    X = preprocessing_result.X
-
-    df["acc_vt"] = X[:, 0]
-    df["acc_ml"] = X[:, 1]
-    df["acc_ap"] = X[:, 2]
-    df["gyr_vt"] = X[:, 3]
-    df["gyr_ml"] = X[:, 4]
-    df["gyr_ap"] = X[:, 5]
-
-    df["imu_quality"] = preprocessing_result.imu_quality
-
-    debug = preprocessing_result.preprocessing_debug_info
-
-    step_frequency = debug.get("step_frequency_hz")
-    m3_cutoff = debug.get("m3_cutoff_hz")
-
-    if step_frequency is not None and m3_cutoff is not None:
-        print(
-            "[INFO] Preprocessing completed | "
-            f"step_frequency={step_frequency:.3f} Hz | "
-            f"M3 cutoff={m3_cutoff:.3f} Hz"
-        )
-    else:
-        print("[INFO] Preprocessing completed.")
-
-    return df
-
-
 def select_algorithm_names(algorithm: str) -> list[str]:
     """Return the list of algorithm keys to run."""
 
@@ -263,6 +78,122 @@ def select_algorithm_names(algorithm: str) -> list[str]:
     return [algorithm]
 
 
+def compute_window_quality_flags(
+    window_detections: pd.DataFrame,
+    *,
+    sample_quality,
+) -> pd.DataFrame:
+    """
+    Add quality metadata to a window-level detection table.
+
+    This function is used for raw inference when a sample-wise quality mask is
+    available from preprocessing.
+
+    It does not use labels and does not require a reference system.
+
+    A window is marked as high quality only if every sample inside the window has
+    sample_quality == True.
+    """
+
+    if sample_quality is None:
+        out = window_detections.copy()
+        out["window_quality_fraction"] = 1.0
+        out["window_is_high_quality"] = True
+        return out
+
+    import numpy as np
+
+    quality = np.asarray(sample_quality, dtype=bool)
+
+    out = window_detections.copy()
+
+    quality_fractions = []
+    high_quality_flags = []
+
+    required_columns = ["window_start_sample", "window_end_sample"]
+    missing = [col for col in required_columns if col not in out.columns]
+
+    if missing:
+        raise KeyError(
+            "Cannot apply sample quality to window detections. "
+            f"Missing columns: {missing}"
+        )
+
+    for _, row in out.iterrows():
+        start = int(row["window_start_sample"])
+        end = int(row["window_end_sample"])
+
+        if start < 0 or end > len(quality) or end <= start:
+            quality_fractions.append(0.0)
+            high_quality_flags.append(False)
+            continue
+
+        window_quality = quality[start:end]
+
+        quality_fractions.append(float(np.mean(window_quality)))
+        high_quality_flags.append(bool(np.all(window_quality)))
+
+    out["window_quality_fraction"] = quality_fractions
+    out["window_is_high_quality"] = high_quality_flags
+
+    return out
+
+
+def apply_quality_filter_to_algorithm(
+    algorithm,
+    *,
+    sample_quality,
+    min_sequence_duration_s: float,
+    merge_gap_s: float,
+):
+    """
+    Remove low-quality windows from an already executed GSD algorithm.
+
+    The model is still evaluated on the complete preprocessed trial. This helper
+    only removes unreliable windows from the final exported detection table and
+    rebuilds gs_list_ from the remaining high-quality windows.
+
+    This is useful for raw inference when preprocessing has identified original
+    long IMU dropout regions.
+    """
+
+    window_detections = compute_window_quality_flags(
+        algorithm.window_detections_,
+        sample_quality=sample_quality,
+    )
+
+    n_before = len(window_detections)
+
+    high_quality_window_detections = window_detections[
+        window_detections["window_is_high_quality"]
+    ].copy()
+
+    n_after = len(high_quality_window_detections)
+
+    algorithm.window_detections_ = high_quality_window_detections.reset_index(
+        drop=True
+    )
+
+    algorithm.gs_list_ = algorithm._build_gs_list(
+        window_detections=algorithm.window_detections_,
+        min_sequence_duration_s=min_sequence_duration_s,
+        merge_gap_s=merge_gap_s,
+    )
+
+    if hasattr(algorithm, "result_"):
+        algorithm.result_.window_detections = algorithm.window_detections_
+        algorithm.result_.gs_list = algorithm.gs_list_
+
+    print(
+        "[INFO] quality filter: "
+        f"kept {n_after}/{n_before} windows "
+        f"({n_before - n_after} removed)"
+    )
+
+    return algorithm
+
+
+
 def run_algorithms(
     trial_df: pd.DataFrame,
     *,
@@ -270,6 +201,7 @@ def run_algorithms(
     sampling_rate_hz: float,
     min_sequence_duration_s: float,
     merge_gap_s: float,
+    exclude_low_quality_windows: bool,
 ) -> dict[str, object]:
     """Run selected algorithms and return fitted algorithm instances."""
 
@@ -299,6 +231,20 @@ def run_algorithms(
             min_sequence_duration_s=min_sequence_duration_s,
             merge_gap_s=merge_gap_s,
         )
+
+        if exclude_low_quality_windows:
+            if "imu_quality" not in trial_df.columns:
+                raise KeyError(
+                    "--exclude-low-quality-windows was requested, but the "
+                    "standardized trial does not contain an imu_quality column."
+                )
+
+            algorithm = apply_quality_filter_to_algorithm(
+                algorithm,
+                sample_quality=trial_df["imu_quality"].to_numpy(dtype=bool),
+                min_sequence_duration_s=min_sequence_duration_s,
+                merge_gap_s=merge_gap_s,
+            )
 
         print(
             f"[INFO] windows={len(algorithm.window_detections_)} | "
@@ -372,6 +318,73 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--sensor-prefix",
+        type=str,
+        default=None,
+        help=(
+            "Optional sensor prefix to select a specific IMU sensor, e.g. "
+            "Forehead, Head, LeftEar. Use this when the file contains multiple sensors."
+        ),
+    )
+
+    parser.add_argument(
+        "--acc-columns",
+        nargs=3,
+        default=None,
+        help=(
+            "Explicit accelerometer columns in X Y Z order. "
+            "Use with --gyr-columns for custom schemas."
+        ),
+    )
+
+    parser.add_argument(
+        "--gyr-columns",
+        nargs=3,
+        default=None,
+        help=(
+            "Explicit gyroscope columns in X Y Z order. "
+            "Use with --acc-columns for custom schemas."
+        ),
+    )
+
+    parser.add_argument(
+        "--acc-input-unit",
+        type=str,
+        default="auto",
+        choices=["auto", "g", "m/s2", "m/s^2"],
+        help="Input accelerometer unit passed to the preprocessing function.",
+    )
+
+    parser.add_argument(
+        "--acc-output-unit",
+        type=str,
+        default="m/s2",
+        choices=["g", "m/s2", "m/s^2"],
+        help="Output accelerometer unit used after preprocessing.",
+    )
+
+    parser.add_argument(
+        "--gyr-scale-factor",
+        type=float,
+        default=1.0,
+        help="Scale factor applied to gyroscope channels before preprocessing.",
+    )
+
+    parser.add_argument(
+        "--static-duration-s",
+        type=float,
+        default=1.0,
+        help="Initial static duration used for gravity alignment.",
+    )
+
+    parser.add_argument(
+        "--lowpass-cutoff-hz",
+        type=float,
+        default=15.0,
+        help="Final low-pass cutoff frequency.",
+    )
+
+    parser.add_argument(
         "--min-sequence-duration-s",
         type=float,
         default=0.0,
@@ -383,6 +396,16 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.0,
         help="Merge consecutive gait sequences separated by at most this gap.",
+    )
+
+    parser.add_argument(
+        "--exclude-low-quality-windows",
+        action="store_true",
+        help=(
+            "After detection, remove windows that contain at least one sample "
+            "with imu_quality == False, then rebuild gs_list_. This option uses "
+            "only raw-signal quality information and does not require labels."
+        ),
     )
 
     parser.add_argument(
@@ -419,15 +442,25 @@ def main() -> None:
         trial_df,
         sampling_rate_hz=args.sampling_rate_hz,
     )
-    trial_df = standardize_head_imu_columns(
+
+    trial_df, column_selection = standardize_single_trial_imu(
         trial_df,
         sampling_rate_hz=args.sampling_rate_hz,
+        sensor_prefix=args.sensor_prefix,
+        acc_columns=args.acc_columns,
+        gyr_columns=args.gyr_columns,
+        acc_input_unit=args.acc_input_unit,
+        acc_output_unit=args.acc_output_unit,
+        gyr_scale_factor=args.gyr_scale_factor,
+        static_duration_s=args.static_duration_s,
+        lowpass_cutoff_hz=args.lowpass_cutoff_hz,
     )
 
     print(
         f"[INFO] trial samples={len(trial_df)} | "
         f"duration={trial_df['time_s'].max():.2f} s"
     )
+    print(f"[INFO] selected IMU source: {column_selection.source}")
 
     algorithm_names = select_algorithm_names(args.algorithm)
 
@@ -437,6 +470,7 @@ def main() -> None:
         sampling_rate_hz=args.sampling_rate_hz,
         min_sequence_duration_s=args.min_sequence_duration_s,
         merge_gap_s=args.merge_gap_s,
+        exclude_low_quality_windows=args.exclude_low_quality_windows,
     )
 
     if args.save_outputs:

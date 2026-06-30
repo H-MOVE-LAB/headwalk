@@ -607,3 +607,47 @@ and:
 
 but this is mainly relevant for labelled training, validation and benchmarking
 workflows. Basic raw inference does not require labels.
+
+-------------------------------------------------------------------------------
+14. Optional quality-aware raw inference
+-------------------------------------------------------------------------------
+
+The minimal apply script can optionally remove low-quality windows after model
+inference:
+
+    --exclude-low-quality-windows
+
+This option uses the sample-wise `imu_quality` mask produced by preprocessing.
+
+The logic is:
+
+    1. preprocessing is applied to the full trial;
+    2. the selected GSD algorithm runs on the preprocessed trial;
+    3. each detected window is checked against `imu_quality`;
+    4. windows touching at least one sample with `imu_quality == False` are removed;
+    5. `gs_list_` is rebuilt from the remaining high-quality windows.
+
+This option does not require labels and does not use a reference system.
+
+It is useful for raw inference when the original IMU signal contains long
+missing-data regions. Short gaps may be filled numerically during preprocessing,
+but long original dropouts remain marked as low quality by the quality mask.
+
+Example:
+
+    PYTHONPATH=src python examples/gait_sequence_detection/01_apply_gsd_single_trial.py \
+      --sampling-rate-hz 100 \
+      --algorithm svm \
+      --exclude-low-quality-windows \
+      --save-outputs \
+      --output-dir results/gait_sequence_detection/apply_single_trial_quality_aware
+
+This is different from labelled dataset construction or validation.
+
+For labelled datasets, a stricter rule can be applied:
+
+    keep a window only if all samples have final_quality == True
+    and no sample has the none / invalid label
+
+For raw inference, labels are usually unavailable, so only signal-quality based
+filtering can be applied.
