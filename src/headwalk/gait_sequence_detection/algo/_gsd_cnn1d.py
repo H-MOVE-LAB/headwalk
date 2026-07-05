@@ -5,6 +5,9 @@ GsdCnn1D algorithm wrapper.
 from __future__ import annotations
 
 import json
+import shutil
+import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -51,8 +54,27 @@ class GsdCnn1D(BaseGsdAlgorithm):
             "model.keras",
         )
 
-        if not self.model_path.exists():
-            raise FileNotFoundError(f"Model file not found: {self.model_path}")
+        self.model_root = self.artifact_dir.parent.parent
+
+        self.architecture_json_path = self._find_first_existing([
+            self.artifact_dir / "model.json",
+            self.artifact_dir / "GsdCnn1D.json",
+            self.model_root / "GsdCnn1D.json",
+        ])
+
+        self.weights_path = self._find_first_existing([
+            self.artifact_dir / "model.weights.h5",
+            self.artifact_dir / "GsdCnn1D.weights.h5",
+            self.model_root / "GsdCnn1D.weights.h5",
+        ])
+
+        if not self.model_path.exists() and (
+            self.architecture_json_path is None or self.weights_path is None
+        ):
+            raise FileNotFoundError(
+                "No usable CNN artifact found. Expected either a Keras model at "
+                f"{self.model_path} or JSON+weights artifacts."
+            )
 
         self.fs = float(self.preprocessing.get("sampling_rate_hz", 100.0))
         self.window_length_s = float(self.preprocessing.get("window_duration_s", 5.0))
@@ -97,6 +119,118 @@ class GsdCnn1D(BaseGsdAlgorithm):
         ]
         return out
 
+    @staticmethod
+    def _find_first_existing(paths: list[Path]) -> Path | None:
+        for path in paths:
+            if path.exists():
+                return path
+        return None
+
+    @staticmethod
+    def _strip_quantization_config(obj: Any) -> Any:
+        """
+        Recursively remove quantization_config fields from a Keras config object.
+
+        This is a compatibility fallback for environments where the model was
+        saved with a newer Keras version than the one used at inference time.
+        Some older Keras versions cannot deserialize layers containing the
+        keyword argument quantization_config, even when its value is None.
+        """
+
+        if isinstance(obj, dict):
+            return {
+                key: GsdCnn1D._strip_quantization_config(value)
+                for key, value in obj.items()
+                if key != "quantization_config"
+            }
+
+        if isinstance(obj, list):
+            return [
+                GsdCnn1D._strip_quantization_config(item)
+                for item in obj
+            ]
+
+        return obj
+
+    @staticmethod
+    def _load_model_from_path(keras, path: Path):
+        """
+        Load a Keras model while avoiding unnecessary compile deserialization.
+
+        compile=False avoids deserializing optimizer/loss state, which is not
+        needed for inference and can be less portable across environments.
+        """
+
+        try:
+            return keras.models.load_model(
+                str(path),
+                compile=False,
+                safe_mode=False,
+            )
+        except TypeError as exc:
+            # Some older tf.keras versions do not expose the safe_mode argument.
+            if "safe_mode" in str(exc):
+                return keras.models.load_model(
+                    str(path),
+                    compile=False,
+                )
+            raise
+
+    def _load_patched_keras_model(self, keras):
+        """
+        Load a temporary copy of the .keras archive after removing
+        quantization_config from config.json.
+        """
+
+        if not self.model_path.exists():
+            raise FileNotFoundError(f"Keras model file not found: {self.model_path}")
+
+        if not zipfile.is_zipfile(self.model_path):
+            raise ValueError(f"Model file is not a zip-based .keras archive: {self.model_path}")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+            patched_path = tmp_dir / self.model_path.name
+
+            with zipfile.ZipFile(self.model_path, "r") as zin:
+                with zipfile.ZipFile(patched_path, "w") as zout:
+                    for item in zin.infolist():
+                        data = zin.read(item.filename)
+
+                        if item.filename == "config.json":
+                            config = json.loads(data.decode("utf-8"))
+                            config = self._strip_quantization_config(config)
+                            data = json.dumps(config).encode("utf-8")
+
+                        zout.writestr(item, data)
+
+            return self._load_model_from_path(keras, patched_path)
+
+    def _load_json_and_weights_model(self, keras):
+        """
+        Rebuild the CNN from a JSON architecture file and load only weights.
+
+        This is the most portable fallback because it avoids deserializing the
+        full .keras model archive.
+        """
+
+        if self.architecture_json_path is None:
+            raise FileNotFoundError("No CNN JSON architecture file found.")
+
+        if self.weights_path is None:
+            raise FileNotFoundError("No CNN weights file found.")
+
+        raw_config = self._load_json(self.architecture_json_path)
+        clean_config = self._strip_quantization_config(raw_config)
+
+        model = keras.models.model_from_json(
+            json.dumps(clean_config)
+        )
+
+        model.load_weights(str(self.weights_path))
+
+        return model
+
     def _load_keras_model(self):
         try:
             from tensorflow import keras
@@ -106,7 +240,42 @@ class GsdCnn1D(BaseGsdAlgorithm):
                 "Install tensorflow in the active environment."
             ) from exc
 
-        return keras.models.load_model(str(self.model_path))
+        errors = []
+
+        if self.model_path.exists():
+            try:
+                model = self._load_model_from_path(keras, self.model_path)
+                self.model_load_strategy_ = "keras_model"
+                return model
+            except Exception as exc:
+                errors.append(("keras_model", repr(exc)))
+
+            try:
+                model = self._load_patched_keras_model(keras)
+                self.model_load_strategy_ = "patched_keras_model_without_quantization_config"
+                return model
+            except Exception as exc:
+                errors.append(("patched_keras_model_without_quantization_config", repr(exc)))
+
+        try:
+            model = self._load_json_and_weights_model(keras)
+            self.model_load_strategy_ = "json_architecture_plus_weights"
+            return model
+        except Exception as exc:
+            errors.append(("json_architecture_plus_weights", repr(exc)))
+
+        error_lines = [
+            "Could not load GsdCnn1D model with any available strategy.",
+            f"model_path: {self.model_path}",
+            f"architecture_json_path: {self.architecture_json_path}",
+            f"weights_path: {self.weights_path}",
+            "Tried strategies:",
+        ]
+
+        for strategy, error in errors:
+            error_lines.append(f"  - {strategy}: {error}")
+
+        raise RuntimeError("\\n".join(error_lines))
 
     def _load_channel_normalization(self):
         cnn_meta = self.preprocessing.get("cnn_preprocessing_metadata", {})
