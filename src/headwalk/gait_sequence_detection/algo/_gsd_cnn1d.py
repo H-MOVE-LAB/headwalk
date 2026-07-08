@@ -99,7 +99,13 @@ class GsdCnn1D(BaseGsdAlgorithm):
             for k, v in self.label_name_map.items()
         }
 
-        self.model = self._load_keras_model()
+        # The Keras model is intentionally loaded lazily.
+        #
+        # Initializing GsdCnn1D should be lightweight and should not import/load
+        # TensorFlow unless the CNN is actually used for detection.
+        self.model = None
+        self.model_load_strategy_ = None
+
         self.channel_mean, self.channel_std = self._load_channel_normalization()
 
     @staticmethod
@@ -230,6 +236,19 @@ class GsdCnn1D(BaseGsdAlgorithm):
         model.load_weights(str(self.weights_path))
 
         return model
+
+    def _ensure_model_loaded(self):
+        """
+        Load the Keras model only when the CNN is actually used.
+
+        This keeps class initialization lightweight and avoids importing
+        TensorFlow/Keras when the user only instantiates the algorithm object.
+        """
+
+        if self.model is None:
+            self.model = self._load_keras_model()
+
+        return self.model
 
     def _load_keras_model(self):
         try:
@@ -375,7 +394,9 @@ class GsdCnn1D(BaseGsdAlgorithm):
 
         windows = self._normalize_windows(windows)
 
-        probabilities = self.model.predict(windows, verbose=0)
+        model = self._ensure_model_loaded()
+
+        probabilities = model.predict(windows, verbose=0)
 
         detected_labels = np.argmax(probabilities, axis=1).astype(int)
 
@@ -439,4 +460,5 @@ class GsdCnn1D(BaseGsdAlgorithm):
             "config": self.config,
             "metadata": self.metadata,
             "preprocessing": self.preprocessing,
+            "model_load_strategy": self.model_load_strategy_,
         }

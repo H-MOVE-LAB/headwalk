@@ -82,13 +82,40 @@ ALGORITHM_CLASSES = {
 }
 
 
-def select_algorithm_names(algorithm: str) -> list[str]:
-    """Return the list of algorithm keys to run."""
+def select_algorithm_names(
+    *,
+    algorithm: str | None,
+    algorithms: list[str] | None,
+) -> list[str]:
+    """
+    Return the list of algorithm keys to run.
 
-    if algorithm == "all":
+    --algorithms has priority over --algorithm.
+
+    Examples:
+        --algorithm cnn
+        --algorithms cnn rb
+        --algorithms svm rf cnn
+        --algorithms all
+    """
+
+    if algorithms:
+        selected = [name.lower() for name in algorithms]
+    else:
+        selected = [(algorithm or "all").lower()]
+
+    if "all" in selected:
         return ["svm", "rf", "knn", "lr", "gnb", "rb", "cnn"]
 
-    return [algorithm]
+    unknown = [name for name in selected if name not in ALGORITHM_CLASSES]
+
+    if unknown:
+        raise ValueError(
+            f"Unknown algorithm(s): {unknown}. "
+            f"Available: {sorted(ALGORITHM_CLASSES)} or all."
+        )
+
+    return selected
 
 
 def resolve_optional_trial_path(path_text: str | None) -> Path | None:
@@ -405,7 +432,9 @@ def plot_single_trial(
     Create a visual comparison plot for one trial.
 
     The top panel shows the standardized accelerometer signal.
-    The lower panel shows optional reference intervals and algorithm outputs.
+    If a reference is available, walking-labelled reference intervals are shown
+    as shaded regions on the signal.
+    The lower panel shows only algorithm predictions.
     """
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -424,13 +453,34 @@ def plot_single_trial(
         1,
         figsize=(15, 8),
         sharex=True,
-        gridspec_kw={"height_ratios": [2, 1 + 0.35 * (len(algorithms) + 1)]},
+        gridspec_kw={"height_ratios": [2, 1 + 0.35 * max(len(algorithms), 1)]},
     )
 
     signal_axis = axes[0]
     bands_axis = axes[1]
 
     segment_time = time_s[segment_mask]
+
+    if reference_gs_list is not None and not reference_gs_list.empty:
+        clipped_ref = clip_gs_list_to_segment(
+            reference_gs_list,
+            start_s=start_s,
+            end_s=end_s,
+        )
+
+        first_reference_band = True
+
+        for _, row in clipped_ref.iterrows():
+            label = "REF walking" if first_reference_band else None
+
+            signal_axis.axvspan(
+                float(row["start_s"]),
+                float(row["end_s"]),
+                alpha=0.15,
+                label=label,
+            )
+
+            first_reference_band = False
 
     for col in ["acc_vt", "acc_ml", "acc_ap"]:
         signal_axis.plot(
@@ -445,12 +495,10 @@ def plot_single_trial(
     signal_axis.grid(True, alpha=0.3)
     signal_axis.legend(loc="upper right")
 
-    row_names = []
+    row_names = list(algorithms.keys())
 
-    if reference_gs_list is not None:
-        row_names.append("REF")
-
-    row_names.extend(list(algorithms.keys()))
+    if not row_names:
+        row_names = ["No model output"]
 
     y_positions = np.arange(len(row_names))
 
@@ -462,21 +510,6 @@ def plot_single_trial(
     bands_axis.grid(True, axis="x", alpha=0.3)
 
     row_index = 0
-
-    if reference_gs_list is not None:
-        clipped_ref = clip_gs_list_to_segment(
-            reference_gs_list,
-            start_s=start_s,
-            end_s=end_s,
-        )
-
-        for _, row in clipped_ref.head(max_bands).iterrows():
-            bands_axis.broken_barh(
-                [(float(row["start_s"]), float(row["end_s"] - row["start_s"]))],
-                (row_index - 0.35, 0.7),
-            )
-
-        row_index += 1
 
     for algorithm_name, algorithm in algorithms.items():
         clipped_gs = clip_gs_list_to_segment(
@@ -662,6 +695,19 @@ def parse_args() -> argparse.Namespace:
         help="GSD algorithm to run. Use 'all' to run every available algorithm.",
     )
 
+
+    parser.add_argument(
+        "--algorithms",
+        nargs="+",
+        default=None,
+        choices=["all", "svm", "rf", "knn", "lr", "gnb", "rb", "cnn"],
+        help=(
+            "One or more GSD algorithms to run. This has priority over "
+            "--algorithm. Examples: --algorithms cnn rb, --algorithms svm rf cnn."
+        ),
+    )
+
+
     parser.add_argument(
         "--sensor-prefix",
         type=str,
@@ -816,7 +862,10 @@ def main() -> None:
     output_dir = resolve_cli_path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    algorithm_names = select_algorithm_names(args.algorithm)
+    algorithm_names = select_algorithm_names(
+        algorithm=args.algorithm,
+        algorithms=args.algorithms,
+    )
 
     trial_specs = [
         ("pd_freewalk", resolve_optional_trial_path(args.pd_trial_csv)),
