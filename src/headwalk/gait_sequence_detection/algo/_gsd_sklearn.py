@@ -66,7 +66,12 @@ class GsdSklearnModel(BaseGsdAlgorithm):
                 f"{self.__class__.__name__} expects a joblib artifact."
             )
 
-        self.model = joblib.load(self.model_path)
+        # The sklearn estimator is intentionally loaded lazily.
+        #
+        # Initializing the algorithm should be lightweight. The joblib model is
+        # loaded only when detection is actually executed.
+        self.model = None
+        self.model_load_strategy_ = None
 
         self.selected_features = self.config.get("selected_features", [])
         if not self.selected_features:
@@ -123,6 +128,17 @@ class GsdSklearnModel(BaseGsdAlgorithm):
                 "The loaded artifact does not match this algorithm class. "
                 f"Expected {self.expected_model_name!r}, found {source_model_name!r}."
             )
+
+    def _ensure_model_loaded(self):
+        """
+        Load the sklearn/joblib estimator only when it is actually used.
+        """
+
+        if self.model is None:
+            self.model = joblib.load(self.model_path)
+            self.model_load_strategy_ = "joblib_model"
+
+        return self.model
 
     @staticmethod
     def _normalize_dataframe_columns(data: pd.DataFrame) -> pd.DataFrame:
@@ -292,7 +308,9 @@ class GsdSklearnModel(BaseGsdAlgorithm):
 
         X = self._select_model_input(feature_table)
 
-        detected_labels = np.asarray(self.model.predict(X)).astype(int)
+        model = self._ensure_model_loaded()
+
+        detected_labels = np.asarray(model.predict(X)).astype(int)
 
         window_detections = feature_table.copy()
         window_detections["gsd_label"] = detected_labels
@@ -301,8 +319,8 @@ class GsdSklearnModel(BaseGsdAlgorithm):
             for label in detected_labels
         ]
 
-        if hasattr(self.model, "predict_proba"):
-            probabilities = self.model.predict_proba(X)
+        if hasattr(model, "predict_proba"):
+            probabilities = model.predict_proba(X)
             if probabilities.ndim == 2 and probabilities.shape[1] >= 2:
                 window_detections["gsd_probability_static"] = probabilities[:, 0]
                 window_detections["gsd_probability_walking"] = probabilities[:, 1]
@@ -355,4 +373,5 @@ class GsdSklearnModel(BaseGsdAlgorithm):
             "config": self.config,
             "metadata": self.metadata,
             "preprocessing": self.preprocessing,
+            "model_load_strategy": self.model_load_strategy_,
         }
